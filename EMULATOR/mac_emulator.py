@@ -1,4 +1,6 @@
 import os, subprocess, serial, time
+import threading
+from multiprocessing import Process, Queue
 
 class serial_emulator(object):
     def __init__(self, device_port='./ttydevice', client_port='./ttyclient'):
@@ -20,7 +22,7 @@ class serial_emulator(object):
         line = ''
         while self.serialR.inWaiting() > 0:
             line += (self.serialR.read()).decode('utf-8')
-        print(line)
+        return line
 
     def __del__(self):
         self.stop()
