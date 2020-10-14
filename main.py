@@ -9,6 +9,15 @@ from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import Qt, QTimer, QProcess
 from pyqtgraph import PlotWidget, plot, mkPen
 
+# Over all very nice. I think this is a great start.
+# Next features to add should be:
+#       - Plotting 4 channels of data at a time
+#       - Generate 16 channels of data and adding a few drop down boxes so that we can view 4 of these 16 channels
+#       - Adding an option to save data to a file (and saving this dummy data to a file)
+# 
+# Some notes:
+#       - We'll probably want to split the math (the sin waves) into a seperate object/class so that we can hot swap it with the EEG data stream
+#       - This way we can just give the plot widgets access to a queue and have them plot whatever is coming out of the queue
 
 class MainWindow(QMainWindow):
 
