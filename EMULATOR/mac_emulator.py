@@ -107,15 +107,21 @@ if __name__ == '__main__':
     #             break
 
     # to start data dumping process
+    print("starting...")
     messageQueue.put("start")
 
     # put your code here
     # earEEG
     #
-    time.sleep(1)
+    print("sleeping...")
+    time.sleep(5)
+    while (dataQueue.empty() == False):
+        msg = dataQueue.get()
+        print(msg)
     #
     #
 
     # to stop data dumping
+    print("stoping...")
     messageQueue.put("stop")
     earEEG_process.join()
