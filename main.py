@@ -4,7 +4,7 @@ import numpy as np
 import multiprocessing as mp
 from time import sleep
 from random import randint
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QWidget, QComboBox
+from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import Qt, QTimer, QProcess
 from pyqtgraph import PlotWidget, plot, mkPen
@@ -17,24 +17,24 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Ear EEG GUI")
 
-        numGraphs = 8 # Number of graphs to create, will probally end at 16
+        numPlots = 16 # Number of graphs to create, will probally end at 32
 
-        possWidgets = []
+        possPlotData = []
 
         colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w'] # Background colors of the graphs, currently used as otherwise all graphs would look identical
 
-        # Currently creates 'numGraphs' identical test graphs, eventually each graph will be created individually
-        for i in range(numGraphs): 
+        # Currently creates 'numPlots' identical test graphs, eventually each graph will be created individually
+        for i in range(numPlots): 
             dataProcess = SampleDataProcess()
             p = mp.Process(target=dataProcess.startUpdateData)
             p.daemon = True
             p.start()
 
-            plotWidget = CustomPlotWidget(dataProcess, colors[i % len(colors)])
-            plotWidget.startRedraw()
-            possWidgets.append((i, plotWidget)) # First item in the tuple is supposed to be the name of the graph, is currently just its index
+            # List of all DataProcesses that can become graphs (and then be shown) during runtime
+            # First item in the tuple is supposed to be the name of the graph, is currently just its color
+            possPlotData.append((colors[i % len(colors)], dataProcess))
 
-        layout = CustomGridLayout(possWidgets)
+        layout = CustomGridLayout(possPlotData)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
@@ -43,140 +43,261 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, possWidgets):
+    def __init__(self, possPlotData):
 
         self.parent = super()
         self.parent.__init__()
-        self.possWidgets = possWidgets
 
-        self.lables = [str(w[0]) for w in self.possWidgets] # Extracts the names of the graphs for the dropdown menu
+        current = [] # Universal 2d list of current plots being shown
 
-        # Creates the dropdown menues
+        lables = [str(d[0]) for d in possPlotData] # Extracts the names of the graphs for the dropdown menu
+
+        # Sets maximum number of plots that can be shown at once, one column can't ever show more than half the graphs or more than 8 graphs
+        normalMaxNumPlots = 8
+        maxNumPlots = min(normalMaxNumPlots, int(len(possPlotData) / 2))
+
+        # Creates intial plots and puts them into the PlotColumn objects, currently hardcoded to initially show a 2x2 grid of plots
+        plot0 = CustomPlotWidget(possPlotData[0][1], possPlotData[0][0]) # Creates plot widget from a DataProcess and a color, color will be removed after testing
+        plot0.startRedraw() # Starts the plot widget redrawing itself
+
+        plot1 = CustomPlotWidget(possPlotData[1][1], possPlotData[1][0])
+        plot1.startRedraw()
+
+        plot2 = CustomPlotWidget(possPlotData[2][1], possPlotData[2][0])
+        plot2.startRedraw()
+
+        plot3 = CustomPlotWidget(possPlotData[3][1], possPlotData[3][0])
+        plot3.startRedraw()
+
+        plotColumn0 = PlotColumn([plot0, plot1], 0, maxNumPlots) # Creates a plot column from a list of plots, an index and the max number of plots
+        plotColumn1 = PlotColumn([plot2, plot3], 1, maxNumPlots)
+
+        # Creates the starting dropdown menues
         d0 = QComboBox()
         d1 = QComboBox()
         d2 = QComboBox()
         d3 = QComboBox()
 
-        d0.addItems(self.lables) # Adds the graph names to the dropdown menu
+        d0.addItems(lables) # Adds the graph names to the dropdown menu
         d0.setCurrentIndex(0) # Sets the item that it should start on, must come before connecting 'currentIndexChanged'
-        d0.currentIndexChanged.connect(self.changeWidget0) # Sets function to call when a user selects a different item from dropdown menu
 
-        d1.addItems(self.lables)
+        d1.addItems(lables)
         d1.setCurrentIndex(1)
-        d1.currentIndexChanged.connect(self.changeWidget1)
 
-        d2.addItems(self.lables)
+        d2.addItems(lables)
         d2.setCurrentIndex(2)
-        d2.currentIndexChanged.connect(self.changeWidget2)
 
-        d3.addItems(self.lables)
+        d3.addItems(lables)
         d3.setCurrentIndex(3)
-        d3.currentIndexChanged.connect(self.changeWidget3)
 
-        # Adds plots as 'DropdownPlotCombo' which is a 'VBoxLayout' containing both dropdown menu and plot
-        self.parent.addWidget(DropdownPlotCombo(d0 ,self.possWidgets[0][1]), 0, 0)
-        self.parent.addWidget(DropdownPlotCombo(d1 ,self.possWidgets[1][1]), 0, 1)
-        self.parent.addWidget(DropdownPlotCombo(d2 ,self.possWidgets[2][1]), 1, 0)
-        self.parent.addWidget(DropdownPlotCombo(d3 ,self.possWidgets[3][1]), 1, 1)
+        columnDropdowns0 = ColumnDropdowns([d0, d1], plotColumn0, possPlotData, lables, current, maxNumPlots)
+        columnDropdowns1 = ColumnDropdowns([d2, d3], plotColumn1, possPlotData, lables, current, maxNumPlots)
 
-        # Sets grid up so all rows and columns will be of equal size
+        # Adds plots and dropdown menus in a grid format, will have to add other buttons to row 1 later (start/stop, etc.)
+        self.parent.addWidget(plotColumn0, 0, 0)
+        self.parent.addWidget(columnDropdowns0, 1, 0)
+        self.parent.addWidget(plotColumn1, 0, 1)
+        self.parent.addWidget(columnDropdowns1, 1, 1)
+
+        current.append([possPlotData[0], possPlotData[1]]) # 
+        current.append([possPlotData[2], possPlotData[3]])
+        current.append([columnDropdowns0, columnDropdowns1]) # Last item in current is list of ColumnDropdowns so they can reference each other
+
+        # Sets grid up so all columns will be of equal size
         self.parent.setColumnStretch(0, 1) 
         self.parent.setColumnStretch(1, 1)
-        self.parent.setRowStretch(0, 1)
-        self.parent.setRowStretch(1, 1)
+        # self.parent.setRowStretch(0, 1)
+        # self.parent.setRowStretch(1, 1)
 
-        self.current = [self.possWidgets[0], self.possWidgets[1], self.possWidgets[2], self.possWidgets[3]] # Keeps track of currently displayed widgets
+# Class containing all of the dropdown menues corrosponding to a certain PlotColumn
+class ColumnDropdowns(QWidget):
 
-    # Called when the selected value in dropdown 0 is changed
-    def changeWidget0(self, idx):
-        self.changeWidgetHelper(idx, 0)
+    def __init__(self, startingDropdowns, plotColumn, possPlotData, lables, current, maxNumPlots):
 
-    def changeWidget1(self, idx):
-        self.changeWidgetHelper(idx, 1)
+        super().__init__()
+        self.layout = QHBoxLayout()
 
-    def changeWidget2(self, idx):
-        self.changeWidgetHelper(idx, 2)
+        self.dropdowns = startingDropdowns
+        self.plotColumn = plotColumn # PlotColumn that corrosponds to this set of dropdown menus
+        self.possPlotData = possPlotData
+        self.lables = lables
+        self.current = current
+        self.maxNumPlots = maxNumPlots
 
-    def changeWidget3(self, idx):
-        self.changeWidgetHelper(idx, 3)
+        self.numPlots = len(startingDropdowns)
+        self.screenIdx = self.plotColumn.getScreenIdx() # Corrosponds to index on screen, used to select the right column when indexing into current
+
+        sizeDropdown = QComboBox()
+        sizeDropdown.addItems(str(val) for val in range(self.maxNumPlots + 1))
+        sizeDropdown.setCurrentIndex(self.numPlots)
+        sizeDropdown.currentIndexChanged.connect(self.changeSize)
+        self.layout.addWidget(sizeDropdown, 1)
+
+        # Uses lambda function to connect each intial dropdown to changePlotHelper with the right parameters and then adds it to the layout
+        for idx, drop in enumerate(self.dropdowns):
+            drop.currentIndexChanged.connect(lambda possPlotDataIdx, plotIdx=idx: self.changePlotHelper(possPlotDataIdx, plotIdx))
+            self.layout.addWidget(drop, 1)
+        
+        # Fills dropdowns list so that indexing outside of the current self.numPlots value can be done
+        for _ in range(self.maxNumPlots - self.numPlots):
+            self.dropdowns.append(None)
+
+        self.setLayout(self.layout)
+
+    # Called when the size dropdown changes value
+    def changeSize(self, newSize):
+        sizeDiff = newSize - self.numPlots
+
+        # This section is called when the size goes down, it removes the extra dropdown menus and then tells the PlotColumn to reduce its size
+        if sizeDiff < 0:
+            for idx in range(newSize, self.numPlots):
+                self.layout.removeWidget(self.dropdowns[idx])
+                self.dropdowns[idx].deleteLater()
+                self.dropdowns[idx] = None
+
+            del self.current[self.screenIdx][newSize:self.numPlots]
+
+            self.plotColumn.shrink(newSize)
+        # This section is called when the size goes up
+        # It starts by finding the next sizeDiff DataProcesses that aren't already on screen and creates plot widgets from them
+        # It then adds the neccesary dropdown menus and finally tells the PlotColumn to add these new plot widgets
+        else:
+            newPlots = []
+            indices = [] # Used to set the intial value of the dropdown menus
+            idx = 0
+            while len(newPlots) < sizeDiff:
+                possData = self.possPlotData[idx]
+                exists = False
+                for col in self.current:
+                    if possData in col:
+                        exists = True
+                if not exists:
+                    newPlot = CustomPlotWidget(possData[1], possData[0])
+                    newPlot.startRedraw()
+                    newPlots.append(newPlot)
+                    indices.append(idx)
+                    self.current[self.screenIdx].append(possData)
+                idx += 1
+
+            for idx in range(self.numPlots, newSize):
+                newDrop = QComboBox()
+                newDrop.addItems(self.lables)
+                newDrop.setCurrentIndex(indices[idx - self.numPlots])
+                newDrop.currentIndexChanged.connect(lambda possPlotDataIdx, plotIdx=idx: self.changePlotHelper(possPlotDataIdx, plotIdx))
+
+                self.dropdowns[idx] = newDrop
+                self.layout.addWidget(self.dropdowns[idx], 1)
+
+            self.plotColumn.grow(newSize, newPlots)
+        
+        self.numPlots = newSize
     
-    def changeWidgetHelper(self, widgetIdx, loc):
+    # Called when the user changes any of the plots with the dropdown menu
+    def changePlotHelper(self, possPlotDataIdx, plotIdx):
 
-        newWidget = self.possWidgets[widgetIdx]
-        row, col = int(loc / 2), int(loc % 2) # 0 = (0, 0), 1 = (0, 1), 2 = (1, 0), 3 = (1, 1)
+        newPlotData = self.possPlotData[possPlotDataIdx]
 
-        if newWidget in self.current: # If the graph is already being displayed swap the postion of the new graph and graph currently in the box
+        # Checks if the desired plot already exists anywhere on screen
+        exists = False
+        colIdx = -1 # Equiv to self.screenIdx but for the desired plot (that could be in any column onscreen currently)
+        for idx, col in enumerate(self.current):
+            if newPlotData in col:
+                exists = True
+                colIdx = idx
+
+        if exists: # If the graph is already being displayed on screen swap the postion of the new graph and graph currently in the way
 
             # Primary refers to where the just selected graph will go, secondary refers to where the graph currently in the box will go
-            oldSecondaryLoc = self.current.index(newWidget)
-            secondaryRow = int(oldSecondaryLoc / 2)
-            secondaryCol = int(oldSecondaryLoc % 2)
+            oldSecondaryLoc = self.current[colIdx].index(newPlotData)
 
-            primary = self.itemAtPosition(row, col).widget()
-            secondary = self.itemAtPosition(secondaryRow, secondaryCol).widget()
+            secondary = self.current[-1][colIdx]
 
-            primary.tradePlot(secondary) # Swaps the plots
+            self.plotColumn.tradePlot(plotIdx, secondary.plotColumn, oldSecondaryLoc) # Swaps the plots
 
-            # Updates the secondary dropdown to the correct value
-            secondaryDrop = secondary.getDropdown()
+            # Updates the secondary dropdown menu to the correct value
+            secondaryDrop = secondary.dropdowns[oldSecondaryLoc]
             secondaryDrop.blockSignals(True)
-            secondaryDrop.setCurrentIndex(self.possWidgets.index(self.current[loc]))
+            secondaryDrop.setCurrentIndex(self.possPlotData.index(self.current[self.screenIdx][plotIdx]))
             secondaryDrop.blockSignals(False)
 
-            # Updates the currently displayed widgets
-            self.current[oldSecondaryLoc] = self.current[loc]
-            self.current[loc] = newWidget
+            # Updates the current
+            self.current[colIdx][oldSecondaryLoc] = self.current[self.screenIdx][plotIdx]
+            self.current[self.screenIdx][plotIdx] = newPlotData
 
         else: # If the newly selected graph isn't already on the screen it just displays it
 
-            curr = self.itemAtPosition(row, col).widget()
-            curr.swapOutPlot(newWidget[1])
-            self.current[loc] = newWidget
+            newPlot = CustomPlotWidget(newPlotData[1], newPlotData[0])
+            newPlot.startRedraw()
+            self.plotColumn.swapOutPlot(plotIdx, newPlot)
+            self.current[self.plotColumn.getScreenIdx()][plotIdx] = newPlotData
 
-class DropdownPlotCombo(QWidget):
+class PlotColumn(QWidget):
 
-    def __init__(self, dropdown, plot):
+    def __init__(self, startingPlots, screenIdx, maxNumPlots):
 
         super().__init__()
         self.layout = QVBoxLayout()
 
-        self.dropdown = dropdown
-        self.plot = plot
+        self.plots = startingPlots
+        self.screenIdx = screenIdx
 
-        self.layout.addWidget(self.dropdown)
-        self.layout.addWidget(self.plot)
+        self.numPlots = len(self.plots)
+        self.maxNumPlots = maxNumPlots
+
+        for plot in self.plots:
+            self.layout.addWidget(plot, 1)
+
+        # Fills dropdowns list so that indexing outside of the current self.numPlots value can be done
+        for _ in range(self.maxNumPlots - self.numPlots):
+            self.plots.append(None)
 
         self.setLayout(self.layout)
 
     # Used to display a plot that is not currently on the screen
-    def swapOutPlot(self, newPlot):
-        # This line stops the widget from displaying, only thing that works here but supposedly can sometimes produce strange behavior
-        # Possibly does the same thing as hide but I was worried hide would end up duplicating objects, couldn't find answer online
-        self.plot.setParent(None)
+    def swapOutPlot(self, plotIdx, newPlot):
+        # This will remove the widget from being onscreen and then actually delete it from memory, very useful so we aren't "drawing" graphs that aren't onscreen
+        self.layout.removeWidget(self.plots[plotIdx])
+        self.plots[plotIdx].deleteLater()
 
-        self.plot = newPlot
-        self.layout.addWidget(self.plot)
+        self.plots[plotIdx] = newPlot
+        self.layout.insertWidget(plotIdx, self.plots[plotIdx], 1)
     
-    # Used to trade the plot currently in this object with a plot in another 'DropdownPlotCombox' object
-    def tradePlot(self, dropdownPlotCombo):
+    # Used to trade the plot currently in this object with a plot in another (or even the same) 'PlotColumn' object
+    def tradePlot(self, selfIdx, plotColumn, otherIdx):
 
-        # Swaps plot objects
-        otherPlot = dropdownPlotCombo.plot
-        dropdownPlotCombo.plot = self.plot
-        self.plot = otherPlot
+        # Swaps plot objects in self.plots list
+        otherPlot = plotColumn.plots[otherIdx]
+        plotColumn.plots[otherIdx] = self.plots[selfIdx]
+        self.plots[selfIdx] = otherPlot
 
-        # See above comment about setting parent to None
-        self.plot.setParent(None)
-        dropdownPlotCombo.plot.setParent(None)
+        # Instead of deleting the plot widgets, this just removes them from their current layout, this means they don't have to be recreated 
+        self.plots[selfIdx].setParent(None)
+        plotColumn.plots[otherIdx].setParent(None)
 
-        self.layout.addWidget(self.plot)
-        dropdownPlotCombo.layout.addWidget(dropdownPlotCombo.plot)
+        self.layout.insertWidget(selfIdx, self.plots[selfIdx], 1)
+        plotColumn.layout.insertWidget(otherIdx, plotColumn.plots[otherIdx], 1)
 
-    def getDropdown(self):
-        return self.dropdown
+    # Called when the PlotColumn needs to reduce the number of graphs it is displaying to newSize
+    def shrink(self, newSize):
 
-    def getPlot(self):
-        return self.plot
+        for idx in range(newSize, self.numPlots):
+            self.layout.removeWidget(self.plots[idx])
+            self.plots[idx].deleteLater()
+            self.plots[idx] = None
+        
+        self.numPlots = newSize
+
+    # Called when the PlotColumn needs to increase the number of graphs it is displaying to newSize, adds plot widgets from newPlots
+    def grow(self, newSize, newPlots):
+        if newSize <= self.maxNumPlots:
+            for idx in range(self.numPlots, newSize):
+                self.plots[idx] = newPlots[idx - self.numPlots]
+                self.layout.addWidget(self.plots[idx], 1)
+                
+            self.numPlots = newSize
+
+    def getScreenIdx(self):
+        return self.screenIdx
 
 # Graphs data given and updated by dataProcess
 class CustomPlotWidget(PlotWidget):
@@ -190,6 +311,8 @@ class CustomPlotWidget(PlotWidget):
         self.refreshRate = 25 # How fast to redraw graph in milliseconds, currently not a parameter as will probably be same for every graph
 
         self.pen = mkPen(color=(0,0,0), width=3) # Sets color and size of line drawn on graph
+
+        self.setMouseEnabled(x=False, y=False) # Removes ability to drag graph with mouse
 
         x, y = self.dataProcess.getData()
 
@@ -278,14 +401,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# OLD NOTES:
-# Over all very nice. I think this is a great start.
-# Next features to add should be:
-#       - Plotting 4 channels of data at a time
-#       - Generate 16 channels of data and adding a few drop down boxes so that we can view 4 of these 16 channels
-#       - Adding an option to save data to a file (and saving this dummy data to a file)
-# 
-# Some notes:
-#       - We'll probably want to split the math (the sin waves) into a seperate object/class so that we can hot swap it with the EEG data stream
-#       - This way we can just give the plot widgets access to a queue and have them plot whatever is coming out of the queue
