@@ -4,7 +4,7 @@ import numpy as np
 import multiprocessing as mp
 from time import sleep
 from random import randint
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox
+from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import Qt, QTimer, QProcess
 from pyqtgraph import PlotWidget, plot, mkPen
@@ -23,9 +23,11 @@ class MainWindow(QMainWindow):
 
         colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w'] # Background colors of the graphs, currently used as otherwise all graphs would look identical
 
+        running = mp.Value('i', False) # Univerally controls whether the DataProcesses run and CustomGraphWidgets redraw themselves
+
         # Currently creates 'numPlots' identical test graphs, eventually each graph will be created individually
         for i in range(numPlots): 
-            dataProcess = SampleDataProcess()
+            dataProcess = SampleDataProcess(running)
             p = mp.Process(target=dataProcess.startUpdateData)
             p.daemon = True
             p.start()
@@ -34,7 +36,7 @@ class MainWindow(QMainWindow):
             # First item in the tuple is supposed to be the name of the graph, is currently just its color
             possPlotData.append((colors[i % len(colors)], dataProcess))
 
-        layout = CustomGridLayout(possPlotData)
+        layout = CustomGridLayout(running, possPlotData)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
@@ -43,7 +45,7 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, possPlotData):
+    def __init__(self, running, possPlotData):
 
         self.parent = super()
         self.parent.__init__()
@@ -57,16 +59,16 @@ class CustomGridLayout(QGridLayout):
         maxNumPlots = min(normalMaxNumPlots, int(len(possPlotData) / 2))
 
         # Creates intial plots and puts them into the PlotColumn objects, currently hardcoded to initially show a 2x2 grid of plots
-        plot0 = CustomPlotWidget(possPlotData[0][1], possPlotData[0][0]) # Creates plot widget from a DataProcess and a color, color will be removed after testing
+        plot0 = CustomPlotWidget(running, possPlotData[0][1], possPlotData[0][0]) # Creates plot widget from a DataProcess and a color, color will be removed after testing
         plot0.startRedraw() # Starts the plot widget redrawing itself
 
-        plot1 = CustomPlotWidget(possPlotData[1][1], possPlotData[1][0])
+        plot1 = CustomPlotWidget(running, possPlotData[1][1], possPlotData[1][0])
         plot1.startRedraw()
 
-        plot2 = CustomPlotWidget(possPlotData[2][1], possPlotData[2][0])
+        plot2 = CustomPlotWidget(running, possPlotData[2][1], possPlotData[2][0])
         plot2.startRedraw()
 
-        plot3 = CustomPlotWidget(possPlotData[3][1], possPlotData[3][0])
+        plot3 = CustomPlotWidget(running, possPlotData[3][1], possPlotData[3][0])
         plot3.startRedraw()
 
         plotColumn0 = PlotColumn([plot0, plot1], 0, maxNumPlots) # Creates a plot column from a list of plots, an index and the max number of plots
@@ -90,14 +92,15 @@ class CustomGridLayout(QGridLayout):
         d3.addItems(lables)
         d3.setCurrentIndex(3)
 
-        columnDropdowns0 = ColumnDropdowns([d0, d1], plotColumn0, possPlotData, lables, current, maxNumPlots)
-        columnDropdowns1 = ColumnDropdowns([d2, d3], plotColumn1, possPlotData, lables, current, maxNumPlots)
+        columnDropdowns0 = ColumnDropdowns(running, [d0, d1], plotColumn0, possPlotData, lables, current, maxNumPlots)
+        columnDropdowns1 = ColumnDropdowns(running, [d2, d3], plotColumn1, possPlotData, lables, current, maxNumPlots)
 
         # Adds plots and dropdown menus in a grid format, will have to add other buttons to row 1 later (start/stop, etc.)
-        self.parent.addWidget(plotColumn0, 0, 0)
-        self.parent.addWidget(columnDropdowns0, 1, 0)
-        self.parent.addWidget(plotColumn1, 0, 1)
-        self.parent.addWidget(columnDropdowns1, 1, 1)
+        self.parent.addWidget(plotColumn0, 0, 0, 1, 2)
+        self.parent.addWidget(plotColumn1, 0, 2, 1, 2)
+        self.parent.addWidget(StartStop(running), 1, 0)
+        self.parent.addWidget(columnDropdowns0, 1, 2)
+        self.parent.addWidget(columnDropdowns1, 1, 3)
 
         current.append([possPlotData[0], possPlotData[1]]) # 
         current.append([possPlotData[2], possPlotData[3]])
@@ -108,15 +111,44 @@ class CustomGridLayout(QGridLayout):
         self.parent.setColumnStretch(1, 1)
         # self.parent.setRowStretch(0, 1)
         # self.parent.setRowStretch(1, 1)
+        
+class StartStop(QWidget):
+
+    def __init__(self, running):
+
+        super().__init__()
+
+        self.running = running
+        self.layout = QHBoxLayout()
+
+        startButton = QPushButton("Start")
+        startButton.clicked.connect(self.start)
+
+        stopButton = QPushButton("Stop")
+        stopButton.clicked.connect(self.stop)
+
+        self.layout.addWidget(startButton, 1)
+        self.layout.addWidget(stopButton, 1)
+
+        self.setLayout(self.layout)
+    
+    def start(self):
+        self.running.value = True
+
+    def stop(self):
+        self.running.value = False
+
+    
 
 # Class containing all of the dropdown menues corrosponding to a certain PlotColumn
 class ColumnDropdowns(QWidget):
 
-    def __init__(self, startingDropdowns, plotColumn, possPlotData, lables, current, maxNumPlots):
+    def __init__(self, running, startingDropdowns, plotColumn, possPlotData, lables, current, maxNumPlots):
 
         super().__init__()
         self.layout = QHBoxLayout()
 
+        self.running = running
         self.dropdowns = startingDropdowns
         self.plotColumn = plotColumn # PlotColumn that corrosponds to this set of dropdown menus
         self.possPlotData = possPlotData
@@ -172,7 +204,7 @@ class ColumnDropdowns(QWidget):
                     if possData in col:
                         exists = True
                 if not exists:
-                    newPlot = CustomPlotWidget(possData[1], possData[0])
+                    newPlot = CustomPlotWidget(self.running, possData[1], possData[0])
                     newPlot.startRedraw()
                     newPlots.append(newPlot)
                     indices.append(idx)
@@ -226,7 +258,7 @@ class ColumnDropdowns(QWidget):
 
         else: # If the newly selected graph isn't already on the screen it just displays it
 
-            newPlot = CustomPlotWidget(newPlotData[1], newPlotData[0])
+            newPlot = CustomPlotWidget(self.running, newPlotData[1], newPlotData[0])
             newPlot.startRedraw()
             self.plotColumn.swapOutPlot(plotIdx, newPlot)
             self.current[self.plotColumn.getScreenIdx()][plotIdx] = newPlotData
@@ -302,9 +334,10 @@ class PlotColumn(QWidget):
 # Graphs data given and updated by dataProcess
 class CustomPlotWidget(PlotWidget):
 
-    def __init__(self, dataProcess, color):
+    def __init__(self, running, dataProcess, color):
 
         super().__init__()
+        self.running = running
         self.setBackground(color) # Used to distinguish identical plots
         self.dataProcess = dataProcess
 
@@ -328,9 +361,9 @@ class CustomPlotWidget(PlotWidget):
 
     # Redraws plot with data recived from dataProcess
     def redrawPlot(self):
-
-        x, y = self.dataProcess.getData()
-        self.data_line.setData(x, y)
+        if bool(self.running.value):
+            x, y = self.dataProcess.getData()
+            self.data_line.setData(x, y)
 
 # Abstract class defining methods needed in all data processes, each distinct graph will have an implementation of this
 class DataProcess():
@@ -351,7 +384,9 @@ class DataProcess():
 # Data process for a simple sine wave
 class SampleDataProcess(DataProcess):
     
-    def __init__(self):
+    def __init__(self, running):
+
+        self.running = running
 
         npX = np.arange(0, 1, 0.01)
         npY = np.sin(4 * np.pi * npX)
@@ -363,7 +398,9 @@ class SampleDataProcess(DataProcess):
     def startUpdateData(self):
 
         while True:
-            self.updateData()
+            if bool(self.running.value):
+                self.updateData()
+
             # This sleep will likely not normally be needed (unless we want to cap refresh speed) 
             # Needed here as the sine wave progresses a fixed amount every update
             # This is very different than it will be for real data where progression is based on the calculation run on actual live data coming in
