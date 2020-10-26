@@ -95,9 +95,12 @@ class CustomGridLayout(QGridLayout):
         columnDropdowns0 = ColumnDropdowns(running, [d0, d1], plotColumn0, possPlotData, lables, current, maxNumPlots)
         columnDropdowns1 = ColumnDropdowns(running, [d2, d3], plotColumn1, possPlotData, lables, current, maxNumPlots)
 
+        combindedPlotColumnLayout = QHBoxLayout()
+        combindedPlotColumnLayout.addWidget(plotColumn0)
+        combindedPlotColumnLayout.addWidget(plotColumn1)
+
         # Adds plots and dropdown menus in a grid format, will have to add other buttons to row 1 later (start/stop, etc.)
-        self.parent.addWidget(plotColumn0, 0, 0, 1, 2)
-        self.parent.addWidget(plotColumn1, 0, 2, 1, 2)
+        self.parent.addLayout(combindedPlotColumnLayout, 0, 0, 1, 4)
         self.parent.addWidget(StartStop(running), 1, 0)
         self.parent.addWidget(columnDropdowns0, 1, 2)
         self.parent.addWidget(columnDropdowns1, 1, 3)
@@ -105,12 +108,6 @@ class CustomGridLayout(QGridLayout):
         current.append([possPlotData[0], possPlotData[1]]) # 
         current.append([possPlotData[2], possPlotData[3]])
         current.append([columnDropdowns0, columnDropdowns1]) # Last item in current is list of ColumnDropdowns so they can reference each other
-
-        # Sets grid up so all columns will be of equal size
-        self.parent.setColumnStretch(0, 1) 
-        self.parent.setColumnStretch(1, 1)
-        # self.parent.setRowStretch(0, 1)
-        # self.parent.setRowStretch(1, 1)
         
 class StartStop(QWidget):
 
@@ -178,6 +175,10 @@ class ColumnDropdowns(QWidget):
 
     # Called when the size dropdown changes value
     def changeSize(self, newSize):
+
+        if self.numPlots == 0:
+            self.plotColumn.show()
+
         sizeDiff = newSize - self.numPlots
 
         # This section is called when the size goes down, it removes the extra dropdown menus and then tells the PlotColumn to reduce its size
@@ -190,6 +191,10 @@ class ColumnDropdowns(QWidget):
             del self.current[self.screenIdx][newSize:self.numPlots]
 
             self.plotColumn.shrink(newSize)
+
+            if newSize == 0:
+                self.plotColumn.hide()
+        
         # This section is called when the size goes up
         # It starts by finding the next sizeDiff DataProcesses that aren't already on screen and creates plot widgets from them
         # It then adds the neccesary dropdown menus and finally tells the PlotColumn to add these new plot widgets
