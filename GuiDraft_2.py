@@ -9,9 +9,12 @@
 
 
 from PyQt5 import QtCore, QtGui, QtWidgets, sip
-
+from PyQt5.QtWidgets import QStackedLayout
 
 class Ui_MainWindow(object):
+
+
+
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(698, 600)
@@ -71,11 +74,27 @@ class Ui_MainWindow(object):
         self.horizontalLayout_4.addItem(spacerItem5)
         self.verticalLayout_6.addLayout(self.horizontalLayout_4)
 
+
+
         self.frame_2 = QtWidgets.QFrame(self.centralwidget)
         self.frame_2.setGeometry(QtCore.QRect(30, 280, 581, 221))
         self.frame_2.setFrameShape(QtWidgets.QFrame.StyledPanel)
         self.frame_2.setFrameShadow(QtWidgets.QFrame.Raised)
         self.frame_2.setObjectName("frame_2")
+
+        #self.frame_3 = QtWidgets.QFrame(self.centralwidget)
+        #self.frame_3.setGeometry(QtCore.QRect(30, 280, 581, 221))
+        #self.frame_3.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        #self.frame_3.setFrameShadow(QtWidgets.QFrame.Raised)
+        #self.frame_3.setObjectName("frame_3")
+
+        #self.frame_4 = QtWidgets.QFrame(self.centralwidget)
+        #self.frame_4.setGeometry(QtCore.QRect(30, 280, 581, 221))
+        #self.frame_4.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        #self.frame_4.setFrameShadow(QtWidgets.QFrame.Raised)
+        #self.frame_4.setObjectName("frame_4")
+
+
 
         self.widget_4 = QtWidgets.QWidget(self.centralwidget)
         self.widget_4.setGeometry(QtCore.QRect(90, 490, 120, 80))
@@ -98,9 +117,88 @@ class Ui_MainWindow(object):
         self.menubar.setObjectName("menubar")
         MainWindow.setMenuBar(self.menubar)
 
+
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
         self.statusbar.setObjectName("statusbar")
         MainWindow.setStatusBar(self.statusbar)
+
+        #layout frames
+        self.mainlayout = QStackedLayout()
+        self.mainlayout2 = QStackedLayout()
+        self.mainlayout3 = QStackedLayout()
+
+
+        self.layoutWidgetX1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetX2 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetX3 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetY1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetY2 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetY3 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetZ1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetZ2 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetZ3 = QtWidgets.QWidget(self.frame_2)
+
+
+
+        self.free_run()
+        self.alpha_or_eye_blink()
+        self.ASSR()
+
+
+        self.mainlayout.addWidget(self.layoutWidgetX1)
+        self.mainlayout.addWidget(self.layoutWidgetY1)
+        self.mainlayout.addWidget(self.layoutWidgetY1)
+        self.mainlayout.addWidget(self.layoutWidgetZ1)
+
+        self.mainlayout2.addWidget(self.layoutWidgetX2)
+        self.mainlayout2.addWidget(self.layoutWidgetY2)
+        self.mainlayout2.addWidget(self.layoutWidgetY2)
+        self.mainlayout2.addWidget(self.layoutWidgetZ2)
+
+        self.mainlayout3.addWidget(self.layoutWidgetX3)
+        self.mainlayout3.addWidget(self.layoutWidgetY3)
+        self.mainlayout3.addWidget(self.layoutWidgetY3)
+        self.mainlayout3.addWidget(self.layoutWidgetZ3)
+
+
+        #self.layoutWidget = QtWidgets.QWidget(self.frame_2)
+        #self.layoutWidget.setGeometry(QtCore.QRect(50, -10, 211, 87))
+        #self.layoutWidget.setObjectName("layoutWidget")
+
+        #self.layoutWidget1 = QtWidgets.QWidget(self.frame_2)
+        #self.layoutWidget1.setGeometry(QtCore.QRect(50, 20, 211, 87))
+        #self.layoutWidget1.setObjectName("layoutWidget1")
+
+        #self.layoutWidget3 = QtWidgets.QWidget(self.frame_2)
+        #self.layoutWidget3.setGeometry(QtCore.QRect(50, 20, 211, 220))
+        #self.layoutWidget3.setObjectName("layoutWidget3")
+
+        #self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.layoutWidget)
+        #self.horizontalLayout_10 = QtWidgets.QHBoxLayout()
+        #self.horizontalLayout_3 = QtWidgets.QHBoxLayout()
+        #self.verticalLayout_3 = QtWidgets.QVBoxLayout()
+        #self.verticalLayout_4 = QtWidgets.QVBoxLayout()
+        #self.horizontalLayout = QtWidgets.QHBoxLayout(self.layoutWidget1)
+        #self.verticalLayout = QtWidgets.QVBoxLayout()
+        #self.verticalLayout_2 = QtWidgets.QVBoxLayout()
+
+
+        #self.QtStack = QtWidgets.QStackedLayout()
+
+        #self.stack1 = QtWidgets.QWidget()
+        #self.stack2 = QtWidgets.QWidget()
+        #self.stack3 = QtWidgets.QWidget()
+
+
+        #self.free_run()
+        #self.alpha_or_eye_blink()
+        #self.ASSR()
+
+
+
+        #self.QtStack.addWidget(self.stack1)
+        #self.QtStack.addWidget(self.stack2)
+        #self.QtStack.addWidget(self.stack3)
 
 
 
@@ -121,45 +219,91 @@ class Ui_MainWindow(object):
             #        self.deleteLayout(item.layout())
             #sip.delete(layout)
 
+    #def clearlayouts(self):
+        #for i in reversed(range(self.verticalLayout_5.count())):
+        #    self.verticalLayout_5.itemAt(i).widget().deleteLater()
+        #for i in reversed(range(self.horizontalLayout_10.count())):
+    #        self.horizontalLayout_10.itemAt(i).widget().deleteLater()
+    #    for i in reversed(range(self.horizontalLayout.count())):
+    #        self.horizontalLayout.itemAt(i).widget().deleteLater()
+    #    for i in reversed(range(self.horizontalLayout_3.count())):
+    #        self.horizontalLayout_3.itemAt(i).widget().deleteLater()
+    #    for i in reversed(range(self.verticalLayout_3.count())):
+    #        self.verticalLayout_3.itemAt(i).widget().deleteLater()
+    #    for i in reversed(range(self.verticalLayout_4.count())):
+    #        self.verticalLayout_4.itemAt(i).widget().deleteLater()
+    #    for i in reversed(range(self.verticalLayout.count())):
+    #        self.verticalLayout.itemAt(i).widget().deleteLater()
+    #    for i in reversed(range(self.verticalLayout_2.count())):
+        #    self.verticalLayout_2.itemAt(i).widget().deleteLater()
+
+
     def free_run(self):
 
 
-        self.layoutWidget = QtWidgets.QWidget(self.frame_2)
-        self.layoutWidget.setGeometry(QtCore.QRect(50, -10, 211, 87))
-        self.layoutWidget.setObjectName("layoutWidget")
+        #self.clearlayouts()
+        #self.layoutWidget = QtWidgets.QWidget(self.frame_2)
 
-        self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.layoutWidget)
+
+
+        self.layoutWidgetX1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetX1.setGeometry(QtCore.QRect(50, -10, 211, 87))
+        self.layoutWidgetX1.setObjectName("layoutWidgetX1")
+
+
+
+        #self.layoutWidget.setParent(None)
+        #self.layoutWidget1.setGeometry(QtCore.QRect(0, 0, 0, 0))
+        #self.layoutWidget1.setObjectName("layoutWidget1")
+
+        #self.layoutWidget3.setGeometry(QtCore.QRect(0, 0, 0, 0))
+        #self.layoutWidget3.setObjectName("layoutWidget3")
+
+        self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.layoutWidgetX1)
         self.verticalLayout_5.setContentsMargins(0, 0, 0, 0)
         self.verticalLayout_5.setObjectName("verticalLayout_5")
 
         self.horizontalLayout = QtWidgets.QHBoxLayout()
         self.horizontalLayout.setObjectName("horizontalLayout")
 
-        self.start_delay_text = QtWidgets.QLabel(self.layoutWidget)
+        self.start_delay_text = QtWidgets.QLabel(self.layoutWidgetX1)
         self.start_delay_text.setObjectName("start_delay_text")
         self.start_delay_text.setText("Start Delay")
 
         self.horizontalLayout.addWidget(self.start_delay_text)
 
-        self.lineEdit_4 = QtWidgets.QLineEdit(self.layoutWidget)
+        self.lineEdit_4 = QtWidgets.QLineEdit(self.layoutWidgetX1)
         self.lineEdit_4.setObjectName("lineEdit_4")
 
         self.horizontalLayout.addWidget(self.lineEdit_4)
 
         self.verticalLayout_5.addLayout(self.horizontalLayout)
 
-        self.layoutWidget.show()
+
+
+        #self.stack1.setLayout(self.layoutWidget)
+        #self.layoutWidgetX.show()
+
+        #self.layoutWidget3.show()
+
+
 
 
 
     def alpha_or_eye_blink(self):
-        self.layoutWidget = QtWidgets.QWidget(self.frame_2)
-        self.layoutWidget.setGeometry(QtCore.QRect(300, 20, 225, 84))
-        self.layoutWidget.setObjectName("layoutWidget")
-        #self.layoutWidget.show()
+
+        #self.clearlayouts()
 
 
-        self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.layoutWidget)
+        self.layoutWidgetY1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetY1.setGeometry(QtCore.QRect(300, 20, 225, 84))
+        self.layoutWidgetY1.setObjectName("layoutWidgetY1")
+
+        #self.layoutWidget3.setGeometry(QtCore.QRect(0, 0, 0, 0))
+        #self.layoutWidget3.setObjectName("layoutWidget3")
+
+
+        self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.layoutWidgetY1)
         self.verticalLayout_5.setContentsMargins(0, 0, 0, 0)
         self.verticalLayout_5.setObjectName("verticalLayout_5")
 
@@ -170,14 +314,14 @@ class Ui_MainWindow(object):
         self.verticalLayout_3 = QtWidgets.QVBoxLayout()
         self.verticalLayout_3.setObjectName("verticalLayout_3")
 
-        self.end_delay_text = QtWidgets.QLabel(self.layoutWidget)
+        self.end_delay_text = QtWidgets.QLabel(self.layoutWidgetY1)
         self.end_delay_text.setObjectName("end_delay_text")
         self.end_delay_text.setText("End Delay")
 
 
         self.verticalLayout_3.addWidget(self.end_delay_text)
 
-        self.rest_length_text = QtWidgets.QLabel(self.layoutWidget)
+        self.rest_length_text = QtWidgets.QLabel(self.layoutWidgetY1)
         self.rest_length_text.setObjectName("rest_length_text")
         self.rest_length_text.setText("Rest Length")
 
@@ -187,16 +331,15 @@ class Ui_MainWindow(object):
         self.horizontalLayout_3.addLayout(self.verticalLayout_3)
 
         self.verticalLayout_4 = QtWidgets.QVBoxLayout()
-
         self.verticalLayout_4.setObjectName("verticalLayout_4")
 
-        self.lineEdit_4 = QtWidgets.QLineEdit(self.layoutWidget)
+        self.lineEdit_4 = QtWidgets.QLineEdit(self.layoutWidgetY1)
         self.lineEdit_4.setObjectName("lineEdit_4")
         #self.lineEdit_4.show()
 
         self.verticalLayout_4.addWidget(self.lineEdit_4)
 
-        self.lineEdit_5 = QtWidgets.QLineEdit(self.layoutWidget)
+        self.lineEdit_5 = QtWidgets.QLineEdit(self.layoutWidgetY1)
         self.lineEdit_5.setObjectName("lineEdit_5")
         #self.lineEdit_5.show()
 
@@ -206,40 +349,40 @@ class Ui_MainWindow(object):
 
         self.verticalLayout_5.addLayout(self.horizontalLayout_3)
 
-        self.cue_audio_text = QtWidgets.QCheckBox(self.layoutWidget)
+        self.cue_audio_text = QtWidgets.QCheckBox(self.layoutWidgetY1)
         self.cue_audio_text.setObjectName("cue_audio_text")
         self.cue_audio_text.setText("Cue Audio")
 
 
         self.verticalLayout_5.addWidget(self.cue_audio_text)
 
-        self.layoutWidget1 = QtWidgets.QWidget(self.frame_2)
-        self.layoutWidget1.setGeometry(QtCore.QRect(50, 20, 211, 87))
-        self.layoutWidget1.setObjectName("layoutWidget1")
-        #self.layoutWidget1.show()
+        self.layoutWidgetY2 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetY2.setGeometry(QtCore.QRect(50, 20, 211, 87))
+        self.layoutWidgetY2.setObjectName("layoutWidgetY2")
 
-        self.horizontalLayout = QtWidgets.QHBoxLayout(self.layoutWidget1)
+
+        self.horizontalLayout = QtWidgets.QHBoxLayout(self.layoutWidgetY2)
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
         self.horizontalLayout.setObjectName("horizontalLayout")
 
         self.verticalLayout = QtWidgets.QVBoxLayout()
         self.verticalLayout.setObjectName("verticalLayout")
 
-        self.start_delay_text = QtWidgets.QLabel(self.layoutWidget1)
+        self.start_delay_text = QtWidgets.QLabel(self.layoutWidgetY2)
         self.start_delay_text.setObjectName("start_delay_text")
         self.start_delay_text.setText("Start Delay")
 
 
         self.verticalLayout.addWidget(self.start_delay_text)
 
-        self.cue_length_text = QtWidgets.QLabel(self.layoutWidget1)
+        self.cue_length_text = QtWidgets.QLabel(self.layoutWidgetY2)
         self.cue_length_text.setObjectName("cue_length_text")
         self.cue_length_text.setText("Cue Length")
 
 
         self.verticalLayout.addWidget(self.cue_length_text)
 
-        self.repetitions_text = QtWidgets.QLabel(self.layoutWidget1)
+        self.repetitions_text = QtWidgets.QLabel(self.layoutWidgetY2)
         self.repetitions_text.setObjectName("repetitions_text")
         self.repetitions_text.setText("Repetitions")
 
@@ -251,19 +394,19 @@ class Ui_MainWindow(object):
         self.verticalLayout_2 = QtWidgets.QVBoxLayout()
         self.verticalLayout_2.setObjectName("verticalLayout_2")
 
-        self.lineEdit = QtWidgets.QLineEdit(self.layoutWidget1)
+        self.lineEdit = QtWidgets.QLineEdit(self.layoutWidgetY2)
         self.lineEdit.setObjectName("lineEdit")
         #self.lineEdit.show()
 
         self.verticalLayout_2.addWidget(self.lineEdit)
 
-        self.lineEdit_2 = QtWidgets.QLineEdit(self.layoutWidget1)
+        self.lineEdit_2 = QtWidgets.QLineEdit(self.layoutWidgetY2)
         self.lineEdit_2.setObjectName("lineEdit_2")
         #self.lineEdit_2.show()
 
         self.verticalLayout_2.addWidget(self.lineEdit_2)
 
-        self.lineEdit_3 = QtWidgets.QLineEdit(self.layoutWidget1)
+        self.lineEdit_3 = QtWidgets.QLineEdit(self.layoutWidgetY2)
         self.lineEdit_3.setObjectName("lineEdit_3")
         #self.lineEdit_3.show()
 
@@ -281,18 +424,29 @@ class Ui_MainWindow(object):
         #self.horizontalLayout_2.setObjectName("horizontalLayout_2")
 
 
+        #self.layoutWidgetY.addWidget(self.layoutWidgetY1)
+        #self.layoutWidgetY.addWidget(self.layoutWidgetY2)
+        #self.layoutWidgetY1.show()
+        #self.layoutWidget1.show()
 
-        self.layoutWidget.show()
-        self.layoutWidget1.show()
+
+
+        #self.layoutWidgetY1.setLayout(self.horizontalLayout)
+        #self.layoutWidgetY2.setLayout(self.horizontalLayout)
+        #self.stack2.setLayout(self.layoutWidget1)
+        #self.layoutWidget3.show()
 
     def ASSR(self):
-        self.layoutWidget = QtWidgets.QWidget(self.frame_2)
-        self.layoutWidget.setGeometry(QtCore.QRect(300, 20, 225, 84))
-        self.layoutWidget.setObjectName("layoutWidget")
-        #self.layoutWidget.show()
 
 
-        self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.layoutWidget)
+
+        self.layoutWidgetZ1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetZ1.setGeometry(QtCore.QRect(300, 20, 225, 84))
+        self.layoutWidgetZ1.setObjectName("layoutWidgetZ1")
+        self.layoutWidgetZ1.show()
+
+
+        self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.layoutWidgetZ1)
         self.verticalLayout_5.setContentsMargins(0, 0, 0, 0)
         self.verticalLayout_5.setObjectName("verticalLayout_5")
 
@@ -303,14 +457,14 @@ class Ui_MainWindow(object):
         self.verticalLayout_3 = QtWidgets.QVBoxLayout()
         self.verticalLayout_3.setObjectName("verticalLayout_3")
 
-        self.end_delay_text = QtWidgets.QLabel(self.layoutWidget)
+        self.end_delay_text = QtWidgets.QLabel(self.layoutWidgetZ1)
         self.end_delay_text.setObjectName("end_delay_text")
         self.end_delay_text.setText("End Delay")
 
 
         self.verticalLayout_3.addWidget(self.end_delay_text)
 
-        self.rest_length_text = QtWidgets.QLabel(self.layoutWidget)
+        self.rest_length_text = QtWidgets.QLabel(self.layoutWidgetZ1)
         self.rest_length_text.setObjectName("rest_length_text")
         self.rest_length_text.setText("Rest Length")
 
@@ -323,13 +477,13 @@ class Ui_MainWindow(object):
 
         self.verticalLayout_4.setObjectName("verticalLayout_4")
 
-        self.lineEdit_4 = QtWidgets.QLineEdit(self.layoutWidget)
+        self.lineEdit_4 = QtWidgets.QLineEdit(self.layoutWidgetZ1)
         self.lineEdit_4.setObjectName("lineEdit_4")
         #self.lineEdit_4.show()
 
         self.verticalLayout_4.addWidget(self.lineEdit_4)
 
-        self.lineEdit_5 = QtWidgets.QLineEdit(self.layoutWidget)
+        self.lineEdit_5 = QtWidgets.QLineEdit(self.layoutWidgetZ1)
         self.lineEdit_5.setObjectName("lineEdit_5")
         #self.lineEdit_5.show()
 
@@ -339,47 +493,47 @@ class Ui_MainWindow(object):
 
         self.verticalLayout_5.addLayout(self.horizontalLayout_3)
 
-        self.cue_audio_text = QtWidgets.QCheckBox(self.layoutWidget)
+        self.cue_audio_text = QtWidgets.QCheckBox(self.layoutWidgetZ1)
         self.cue_audio_text.setObjectName("cue_audio_text")
         self.cue_audio_text.setText("Cue Audio")
 
 
         self.verticalLayout_5.addWidget(self.cue_audio_text)
 
-        self.layoutWidget1 = QtWidgets.QWidget(self.frame_2)
-        self.layoutWidget1.setGeometry(QtCore.QRect(50, 20, 211, 115)) #87
-        self.layoutWidget1.setObjectName("layoutWidget1")
-        #self.layoutWidget1.show()
+        self.layoutWidgetZ2 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetZ2.setGeometry(QtCore.QRect(50, 20, 211, 115)) #87
+        self.layoutWidgetZ2.setObjectName("layoutWidgetZ2")
 
-        self.horizontalLayout = QtWidgets.QHBoxLayout(self.layoutWidget1)
+
+        self.horizontalLayout = QtWidgets.QHBoxLayout(self.layoutWidgetZ2)
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
         self.horizontalLayout.setObjectName("horizontalLayout")
 
         self.verticalLayout = QtWidgets.QVBoxLayout()
         self.verticalLayout.setObjectName("verticalLayout")
 
-        self.start_delay_text = QtWidgets.QLabel(self.layoutWidget1)
+        self.start_delay_text = QtWidgets.QLabel(self.layoutWidgetZ2)
         self.start_delay_text.setObjectName("start_delay_text")
         self.start_delay_text.setText("Start Delay")
 
 
         self.verticalLayout.addWidget(self.start_delay_text)
 
-        self.cue_length_text = QtWidgets.QLabel(self.layoutWidget1)
+        self.cue_length_text = QtWidgets.QLabel(self.layoutWidgetZ2)
         self.cue_length_text.setObjectName("cue_length_text")
         self.cue_length_text.setText("Cue Length")
 
 
         self.verticalLayout.addWidget(self.cue_length_text)
 
-        self.repetitions_text = QtWidgets.QLabel(self.layoutWidget1)
+        self.repetitions_text = QtWidgets.QLabel(self.layoutWidgetZ2)
         self.repetitions_text.setObjectName("repetitions_text")
         self.repetitions_text.setText("Repetitions")
 
 
         self.verticalLayout.addWidget(self.repetitions_text)
 
-        self.click_frequency_text = QtWidgets.QLabel(self.layoutWidget1)
+        self.click_frequency_text = QtWidgets.QLabel(self.layoutWidgetZ2)
         self.click_frequency_text.setObjectName("click_frequency_text")
         self.click_frequency_text.setText("Click Frequency")
 
@@ -390,19 +544,19 @@ class Ui_MainWindow(object):
         self.verticalLayout_2 = QtWidgets.QVBoxLayout()
         self.verticalLayout_2.setObjectName("verticalLayout_2")
 
-        self.lineEdit = QtWidgets.QLineEdit(self.layoutWidget1)
+        self.lineEdit = QtWidgets.QLineEdit(self.layoutWidgetZ2)
         self.lineEdit.setObjectName("lineEdit")
         #self.lineEdit.show()
 
         self.verticalLayout_2.addWidget(self.lineEdit)
 
-        self.lineEdit_2 = QtWidgets.QLineEdit(self.layoutWidget1)
+        self.lineEdit_2 = QtWidgets.QLineEdit(self.layoutWidgetZ2)
         self.lineEdit_2.setObjectName("lineEdit_2")
         #self.lineEdit_2.show()
 
         self.verticalLayout_2.addWidget(self.lineEdit_2)
 
-        self.lineEdit_3 = QtWidgets.QLineEdit(self.layoutWidget1)
+        self.lineEdit_3 = QtWidgets.QLineEdit(self.layoutWidgetZ2)
         self.lineEdit_3.setObjectName("lineEdit_3")
         #self.lineEdit_3.show()
 
@@ -410,7 +564,7 @@ class Ui_MainWindow(object):
         self.verticalLayout_2.addWidget(self.lineEdit_3)
 
 
-        self.lineEdit_6 = QtWidgets.QLineEdit(self.layoutWidget1)
+        self.lineEdit_6 = QtWidgets.QLineEdit(self.layoutWidgetZ2)
         self.lineEdit_6.setObjectName("lineEdit")
 
         self.verticalLayout_2.addWidget(self.lineEdit_6)
@@ -423,11 +577,11 @@ class Ui_MainWindow(object):
         #self.layoutWidget2.show()
 
 
-        self.layoutWidget3 = QtWidgets.QWidget(self.frame_2)
-        self.layoutWidget3.setGeometry(QtCore.QRect(50, 20, 211, 220))
-        self.layoutWidget3.setObjectName("layoutWidget3")
+        self.layoutWidgetZ3 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetZ3.setGeometry(QtCore.QRect(50, 20, 211, 220))
+        self.layoutWidgetZ3.setObjectName("layoutWidgetZ3")
 
-        self.horizontalLayout_2 = QtWidgets.QHBoxLayout(self.layoutWidget3)
+        self.horizontalLayout_2 = QtWidgets.QHBoxLayout(self.layoutWidgetZ3)
         self.horizontalLayout_2.setContentsMargins(0, 0, 0, 0)
         self.horizontalLayout_2.setObjectName("horizontalLayout_2")
 
@@ -435,56 +589,89 @@ class Ui_MainWindow(object):
         self.horizontalLayout_2.addLayout(self.verticalLayout_5)
 
 
-        self.layoutWidget.show()
-        self.layoutWidget1.show()
-        self.layoutWidget3.show()
+        #self.layoutWidget.show()
+        #self.layoutWidget1.show()
+        #self.layoutWidget3.show()
 
 
+        #self.stack2.setLayout(layoutWidget3)
+
+
+    #def remove_homeScreen(self, layout):
+
+        #for i in reversed(range(layout.count())):
+            #item = layout.itemAt(i)
+
+        #if isinstance(item, QtGui.QWidgetItem):
+
+        #    item.widget().close()
+
+        #else:
+            #self.remove_homeScreen(item.layout())
+#
+    # remove the item from layout
+        #layout.removeItem(item)
 
     # when select an option from drop down menu, clicking set does this
     # intakes integer
     def frameChange(self, i):
 
+        #delete any previous frames before adding a new frame
+        #for i in reversed(range(self.layoutWidget.count())):
+        #    self.layoutWidget.itemAt(i).widget().setParent(None)
+        #self.remove_homeScreen(self.layoutWidget)
+        #self.remove_homeScreen(self.layoutWidget1)
+        #self.remove_homeScreen(self.layoutWidget3)
+        #for i in reversed(range(layout.count())):
 
+        #self.setupUi(self)..setParent(None)
+
+        #self.setupUi(self).layoutWidget1.setParent(None)
+        #self.setupUi(self).layoutWidget3.setParent(None)
+
+        #layout.itemAt(i).widget().deleteLater()
         #Free Run screen
+#------------
 
-        if i == 0:
+        self.mainlayout.setCurrentIndex(i)
+        self.mainlayout2.setCurrentIndex(i)
+        #if i == 0:
 
 
 
-            self.free_run()
+        #    self.free_run()
 
-
+                        #self.layoutWidget.setParent(None)
         #Eye Blink screen
-        elif i == 1:
-            #if layoutWidget.winfo_exists():
-            #    self.layoutWidget.deleteLater()
-            #if self.layoutWidget1.winfo_exists():
-                #self.layoutWidget1.deleteLater()
+        #elif i == 1:
+                        #if layoutWidget.winfo_exists():
+                            #    self.layoutWidget.deleteLater()
+                        #if self.layoutWidget1.winfo_exists():
+                            #self.layoutWidget1.deleteLater()
 
 
-            self.alpha_or_eye_blink()
+            #self.alpha_or_eye_blink()
 
 
 
         #Alpha screen
-        elif i == 2:
-            #if self.layoutWidget.winfo_exists():
-            #    self.layoutWidget.deleteLater()
-            #if self.layoutWidget1.winfo_exists():
-            #    self.layoutWidget1.deleteLater()
+        #elif i == 2:
+                #if self.layoutWidget.winfo_exists():
+                #    self.layoutWidget.deleteLater()
+                #if self.layoutWidget1.winfo_exists():
+                #    self.layoutWidget1.deleteLater()
 
 
-            self.alpha_or_eye_blink()
+            #self.alpha_or_eye_blink()
 
         #ASSR screen
-        elif i == 3:
-            #if self.layoutWidget.winfo_exists():
-            #    self.layoutWidget.deleteLater()
-            #if self.layoutWidget1.winfo_exists():
-            #    self.layoutWidget1.deleteLater()
+        #elif i == 3:
+                #if self.layoutWidget.winfo_exists():
+                #    self.layoutWidget.deleteLater()
+                #if self.layoutWidget1.winfo_exists():
+                #    self.layoutWidget1.deleteLater()
 
-            self.ASSR()
+            #self.ASSR()
 
 
 
