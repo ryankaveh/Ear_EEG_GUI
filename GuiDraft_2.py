@@ -635,6 +635,7 @@ class Ui_MainWindow(object):
 
         self.mainlayout.setCurrentIndex(i)
         self.mainlayout2.setCurrentIndex(i)
+        self.mainlayout3.setCurrentIndex(i)
         #if i == 0:
 
 
