@@ -1,12 +1,11 @@
-import os
-import sys
+import os, sys, serial, struct
 import numpy as np
 import multiprocessing as mp
 from time import sleep
 from random import randint
 from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton
 from PyQt5.QtGui import QPalette, QColor
-from PyQt5.QtCore import Qt, QTimer, QProcess
+from PyQt5.QtCore import Qt, QTimer, QProcess, QObject
 from pyqtgraph import PlotWidget, plot, mkPen
 
 class MainWindow(QMainWindow):
@@ -17,7 +16,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Ear EEG GUI")
 
-        numPlots = 16 # Number of graphs to create, will probally end at 32
+        numPlots = 4 # Number of graphs to create, will probally end at 32
 
         possPlotData = []
 
@@ -25,9 +24,15 @@ class MainWindow(QMainWindow):
 
         running = mp.Value('i', False) # Univerally controls whether the DataProcesses run and CustomGraphWidgets redraw themselves
 
+        serialVals = (mp.Value("d", 0.0), mp.Value("d", 0.0))
+
+        port = "./ttyGUI"
+        serialReader = SerialReader(port, serialVals)
+        serialReader.startSerialReader()
+
         # Currently creates 'numPlots' identical test graphs, eventually each graph will be created individually
         for i in range(numPlots): 
-            dataProcess = SampleDataProcess(running)
+            dataProcess = SampleDataProcess(running, serialVals)
             p = mp.Process(target=dataProcess.startUpdateData)
             p.daemon = True
             p.start()
@@ -36,7 +41,7 @@ class MainWindow(QMainWindow):
             # First item in the tuple is supposed to be the name of the graph, is currently just its color
             possPlotData.append((colors[i % len(colors)], dataProcess))
 
-        layout = CustomGridLayout(running, possPlotData)
+        layout = CustomGridLayout(running, possPlotData, serialReader)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
@@ -45,7 +50,7 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, running, possPlotData):
+    def __init__(self, running, possPlotData, serialReader):
 
         self.parent = super()
         self.parent.__init__()
@@ -104,6 +109,7 @@ class CustomGridLayout(QGridLayout):
         self.parent.addWidget(StartStop(running), 1, 0)
         self.parent.addWidget(columnDropdowns0, 1, 2)
         self.parent.addWidget(columnDropdowns1, 1, 3)
+        self.parent.addWidget(serialReader, 1, 4)
 
         current.append([possPlotData[0], possPlotData[1]]) # 
         current.append([possPlotData[2], possPlotData[3]])
@@ -389,16 +395,14 @@ class DataProcess():
 # Data process for a simple sine wave
 class SampleDataProcess(DataProcess):
     
-    def __init__(self, running):
+    def __init__(self, running, serialVals):
 
         self.running = running
-
-        npX = np.arange(0, 1, 0.01)
-        npY = np.sin(4 * np.pi * npX)
+        self.serialVals = serialVals
 
         # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
-        self.x = mp.Array('d', list(npX))
-        self.y = mp.Array('d', list(npY))        
+        self.x = mp.Array('d', list(np.arange(-1, 0, .01)))
+        self.y = mp.Array('d', [0] * 100)        
 
     def startUpdateData(self):
 
@@ -409,37 +413,75 @@ class SampleDataProcess(DataProcess):
             # This sleep will likely not normally be needed (unless we want to cap refresh speed) 
             # Needed here as the sine wave progresses a fixed amount every update
             # This is very different than it will be for real data where progression is based on the calculation run on actual live data coming in
-            sleep(0.05)
+            sleep(0.1)
 
     def updateData(self):
-        for idx, val in enumerate(self.x):
-            self.x[idx] = val + 0.01
+
+        # for idx, val in enumerate(self.x):
+        #     self.x[idx] = val + 0.01
 
         # Old method of progressing sine wave, didn't work on the multiprocess safe arrays
         # self.x.append(self.x[-1] + 0.01)
         # self.x = self.x[1:]
 
-        tmp = self.y[0]
-        for idx in range(len(self.y) - 1):
-            self.y[idx] = self.y[idx + 1]
-        self.y[-1] = tmp
+        # tmp = self.y[0]
+        # for idx in range(len(self.y) - 1):
+        #     self.y[idx] = self.y[idx + 1]
+        # self.y[-1] = tmp
 
         # Old method of progressing sine wave, didn't work on the multiprocess safe arrays
         # self.y.append(self.y[0])
         # self.y = self.y[1:]
 
+        # print(self.serialVals[0].value)
+        # print(self.x[-1])
+
+        if self.serialVals[0].value > self.x[-1]:
+            for i in range(len(self.x) - 1):
+                self.x[i] = self.x[i+1]
+            self.x[-1] = self.serialVals[0].value
+            for i in range(len(self.y) - 1):
+                self.y[i] = self.y[i+1]
+            self.y[-1] = self.serialVals[1].value
+            
+
     def getData(self):
         # [:] needed to extract array from multiprocessing.Array
         return self.x[:], self.y[:]
 
+class SerialReader(QWidget):
+
+    def __init__(self, port, serialVals):
+
+        super().__init__()
+        self.serialGUISide = serial.Serial(port, 9600, rtscts=True, dsrdtr=True)
+        self.serialVals = serialVals
+
+        self.refreshRate = 5
+
+        self.hide()
+
+    def startSerialReader(self):
+        self.timer = QTimer()
+        self.timer.setInterval(self.refreshRate)
+        self.timer.timeout.connect(self.updateData)
+        self.timer.start()
+
+    def updateData(self):
+        if self.serialGUISide.in_waiting > 0:
+            val = b''
+            for i in range(16):
+                val += self.serialGUISide.read()
+            tup = struct.unpack("dd", val)
+            self.serialVals[1].value = tup[1]
+            self.serialVals[0].value = tup[0]
 
 def main():
-
     app = QApplication(sys.argv)
     main = MainWindow()
     main.show()
     sys.exit(app.exec_())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

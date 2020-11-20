@@ -1,5 +1,5 @@
-import os, subprocess, serial, time
-import threading
+import os, subprocess, serial, struct, time, threading
+import numpy as np
 from multiprocessing import Process, Queue
 
 
@@ -35,6 +35,7 @@ class serial_emulator(object):
         self.out = ''
 
     def write(self, out):
+        print(out)
         self.serialChipSide.write(out)
 
     def read(self):
@@ -51,10 +52,13 @@ class serial_emulator(object):
         self.out, self.err = self.proc.communicate()
 
 
-def earEEG_genDummyData(lastData):
-    newData = lastData + 1
-    # print(newData)
-    return (newData)
+def earEEG_genDummyData(index, yData):
+    xVal = index * .01
+    yVal = yData[index%len(yData)]
+    # print(index)
+    # print(index%len(yData))
+    tup = (xVal, yVal)
+    return struct.pack("dd", *tup)
 
 def earEEG_process(messageQueue, responseQueue):
 
@@ -67,12 +71,15 @@ def earEEG_process(messageQueue, responseQueue):
 
     # set various flag & starting datapoint
     start_flag = 0
-    lastData = 0
+    index = 0
+    npX = np.arange(0, 1, 0.01)
+    yData = list(np.sin(4 * np.pi * npX))
+
 
     while True:
         # time delay (1 mS)
-        time.sleep(.001)
-        #time.sleep(2) 
+        time.sleep(.1)
+        # time.sleep(2) 
         
         # Use this if statement to start and stop
         # the dummy data generation from the terminal you used to
@@ -101,11 +108,12 @@ def earEEG_process(messageQueue, responseQueue):
 
         if (start_flag == 1):
             # generate & write data to COM Port
-            data = earEEG_genDummyData(lastData)
-            lastData = data
-            earEEG.write(data)
-            line = earEEG.read()
-            responseQueue.put(line)
+            out = earEEG_genDummyData(index, yData)
+            earEEG.write(out)
+            index += 1
+            print(index)
+            # line = earEEG.read()
+            # responseQueue.put(line)
 
 
     
