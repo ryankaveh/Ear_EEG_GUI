@@ -3,6 +3,11 @@ import threading
 from multiprocessing import Process, Queue
 
 
+#
+#
+data_counter = 0
+packet_id = 0
+
 # This currently works! We can change the names of the emulated ports but it doesn't really matter.
 # It's currently set up to be independant of anything else. You just need to run this python script
 # and it will open up dummy serial ports, ttyChip and ttyGUI.
@@ -51,10 +56,46 @@ class serial_emulator(object):
         self.out, self.err = self.proc.communicate()
 
 
-def earEEG_genDummyData(lastData):
-    newData = lastData + 1
+def earEEG_genDummyData():
+    global data_counter
+    global packet_id
+    # eeg_data_chXX = {eeg_out[63:40],impedance_out_i[39:24],impedance_out_q[23:8], edo_out[7:0]};
+    # EEG_NEURAL_DATA_WIDTH = 24;
+    # EEG_IMPEDANCE_DATA_WIDTH = 16;
+    # EEG_EDO_DATA_WIDTH = 8;
+    #
+    # eeg_packet <= {eeg_packet_msb,eeg_packet_id[6:0],
+    #               eeg_data_channel_7,eeg_data_channel_6,eeg_data_channel_5,
+    #               eeg_data_channel_4,eeg_data_channel_3,eeg_data_channel_2,
+    #               eeg_data_channel_1,eeg_data_channel_0};
+
+    chx_EEG = (data_counter + 1).to_bytes(3,'big')
+    chx_EDO = (data_counter + 2).to_bytes(1,'big')
+    chx_i   = (data_counter + 3).to_bytes(2,'big')
+    chx_q   = (data_counter + 3).to_bytes(2,'big')
+
+    pkt_id = (packet_id).to_bytes(1,'big')
+
+
+    chx = chx_EEG + chx_i + chx_q + chx_EDO
+
+    for i in range(0,7):
+        chx += chx
+    
+    packet = pkt_id + chx
+
+    if (packet_id < 254):
+        packet_id = packet_id + 1
+    else:
+        packet_id = 0
+
+    if (data_counter < 253):
+        data_counter = data_counter + 2
+    else:
+        data_counter = 0
+
     # print(newData)
-    return (newData)
+    return (packet)
 
 def earEEG_process(messageQueue, responseQueue):
 
@@ -101,7 +142,7 @@ def earEEG_process(messageQueue, responseQueue):
 
         if (start_flag == 1):
             # generate & write data to COM Port
-            data = earEEG_genDummyData(lastData)
+            data = earEEG_genDummyData()
             lastData = data
             earEEG.write(data)
             line = earEEG.read()
