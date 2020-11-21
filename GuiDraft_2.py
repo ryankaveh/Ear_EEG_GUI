@@ -10,10 +10,28 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets, sip
 from PyQt5.QtWidgets import QStackedLayout
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
+
+
 
 class Ui_MainWindow(object):
+    timer_state = 0
+    start_delay = 0
+
+    #def put_start_delay(self,int):
+        #start_delay = int
 
 
+    #def get_start_delay(self):
+        #return start_delay
+
+    #def put_rest_length(self,int):
+        #rest_length = int
+
+
+    #def get_rest_length(self):
+        #return rest_length
 
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
@@ -23,6 +41,9 @@ class Ui_MainWindow(object):
         self.start_button = QtWidgets.QPushButton(self.centralwidget)
         self.start_button.setGeometry(QtCore.QRect(520, 510, 113, 32))
         self.start_button.setObjectName("start_button")
+
+
+
         self.frame = QtWidgets.QFrame(self.centralwidget)
         self.frame.setGeometry(QtCore.QRect(30, 10, 591, 201))
         self.frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
@@ -110,9 +131,21 @@ class Ui_MainWindow(object):
         self.statusbar.setObjectName("statusbar")
         MainWindow.setStatusBar(self.statusbar)
 
+
+        #self.put_start_delay(0)
+        #self.put_rest_length(0)
+
+
         #layout frames
+        self.cueLayout = QStackedLayout()
         self.mainlayout = QStackedLayout()
         self.mainlayout2 = QStackedLayout()
+
+        self.layoutWidgetBlankLabel = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetStartDelayLabel = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetRestLengthLabel = QtWidgets.QWidget(self.frame)
+        #self.layoutWidgetCueLengthLabel = QtWidgets.QWidget(self.frame)
+        #self.layoutWidgetEndDelayLabel = QtWidgets.QWidget(self.frame)
 
 
 
@@ -125,13 +158,22 @@ class Ui_MainWindow(object):
         self.layoutWidgetASSR1 = QtWidgets.QWidget(self.frame_2)
         self.layoutWidgetASSR2 = QtWidgets.QWidget(self.frame_2)
 
-
+        self.blankLabel()
+        self.startDelayLabel()
+        self.restLengthLabel()
+        #self.cueLengthLabel()
+        #self.endDelayLabel()
 
 
         self.free_run()
         self.alpha_or_eye_blink()
         self.ASSR()
 
+        self.cueLayout.addWidget(self.layoutWidgetBlankLabel)
+        self.cueLayout.addWidget(self.layoutWidgetStartDelayLabel)
+        self.cueLayout.addWidget(self.layoutWidgetRestLengthLabel)
+        #self.cueLayout.addWidget(self.layoutWidgetCueLengthLabel)
+        #self.cueLayout.addWidget(self.layoutWidgetEndDelayLabel)
 
         self.mainlayout.addWidget(self.layoutWidgetFreeRun)
         self.mainlayout.addWidget(self.layoutWidgetAlphaEye1)
@@ -144,9 +186,38 @@ class Ui_MainWindow(object):
         self.mainlayout2.addWidget(self.layoutWidgetASSR2)
 
 
+
+
         self.retranslateUi(MainWindow)
 
         self.drop_down_menu.activated['int'].connect(self.frameChange)
+        self.start_button.clicked.connect(self.CueSetup)
+
+        #Count Down Timer Setup
+
+        #self.start_delay = 0
+        #self.rest_length = 0
+
+
+        self.count = int
+        self.countDown = 0
+        self.startCountDown = False
+
+        self.CountdownLabel = QtWidgets.QLabel("Cue Duration", self)
+
+
+        self.CountdownLabel.setGeometry(40, 100, 150, 30)
+        self.CountdownLabel.setStyleSheet("border : 2px solid black")
+        self.CountdownLabel.setAlignment(Qt.AlignCenter)
+
+
+        self.start_button.clicked.connect(self.StartCueDuration)
+
+        CueDurationTimer = QTimer(self)
+        CueDurationTimer.timeout.connect(self.showTime)
+        CueDurationTimer.start(100)
+
+
 
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
@@ -175,6 +246,8 @@ class Ui_MainWindow(object):
 
         self.start_delay_lineEdit= QtWidgets.QLineEdit(self.layoutWidgetFreeRun)
         self.start_delay_lineEdit.setObjectName("start_delay_lineEdit")
+
+        self.start_delay_lineEdit.textChanged.connect(self.start_delay_updated)
 
         self.horizontalLayout.addWidget(self.start_delay_lineEdit)
 
@@ -221,12 +294,14 @@ class Ui_MainWindow(object):
         self.end_delay_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye1)
         self.end_delay_lineEdit.setObjectName("end_delay_lineEdit")
 
+        #self.end_delay_lineEdit.textChanged.connect(self.end_delay_updated)
 
         self.verticalLayout_Right2.addWidget(self.end_delay_lineEdit)
 
         self.rest_length_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye1)
         self.rest_length_lineEdit.setObjectName("rest_length_lineEdit")
 
+        #self.rest_length_lineEdit.textChanged.connect(self.rest_length_updated)
 
         self.verticalLayout_Right2.addWidget(self.rest_length_lineEdit)
 
@@ -282,12 +357,14 @@ class Ui_MainWindow(object):
         self.start_delay_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye2)
         self.start_delay_lineEdit.setObjectName("start_delay_lineEdit")
 
+        self.start_delay_lineEdit.textChanged.connect(self.start_delay_updated)
 
         self.verticalLayoutLeft2.addWidget(self.start_delay_lineEdit)
 
         self.cue_length_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye2)
         self.cue_length_lineEdit.setObjectName("cue_length_lineEdit")
 
+        #self.cue_length_lineEdit.textChanged.connect(self.cue_length_updated)
 
         self.verticalLayoutLeft2.addWidget(self.cue_length_lineEdit)
 
@@ -356,11 +433,14 @@ class Ui_MainWindow(object):
         self.end_delay_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR1)
         self.end_delay_lineEdit.setObjectName("end_delay_lineEdit")
 
+        #self.end_delay_lineEdit.textChanged.connect(self.end_delay_updated)
 
         self.verticalLayoutRight2.addWidget(self.end_delay_lineEdit)
 
         self.rest_length_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR1)
         self.rest_length_lineEdit.setObjectName("rest_length_lineEdit")
+
+        #self.rest_length_lineEdit.textChanged.connect(self.rest_length_updated)
 
         self.verticalLayoutRight2.addWidget(self.rest_length_lineEdit)
 
@@ -431,12 +511,14 @@ class Ui_MainWindow(object):
         self.start_delay_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR2)
         self.start_delay_lineEdit.setObjectName("start_delay_lineEdit")
 
+        self.start_delay_lineEdit.textChanged.connect(self.start_delay_updated)
 
         self.verticalLayoutLeft2.addWidget(self.start_delay_lineEdit)
 
         self.cue_length_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR2)
         self.cue_length_lineEdit.setObjectName("cue_length_lineEdit")
 
+        #self.cue_length_lineEdit.textChanged.connect(self.cue_length_updated)
 
         self.verticalLayoutLeft2.addWidget(self.cue_length_lineEdit)
 
@@ -454,20 +536,155 @@ class Ui_MainWindow(object):
 
 
     def frameChange(self, i):
+        #self.start_delay_updated.start_delay = 0
+        #self.rest_length_updated.rest_length = 0
+        #self.cue_length_updated.cue_length = 0
+        #self.end_delay_updated.end_delay = 0
 
         self.mainlayout.setCurrentIndex(i)
         self.mainlayout2.setCurrentIndex(i)
+
+
+
+
+    def showTime(self):
+        if self.startCountDown:
+            self.countDown -= 1
+            if self.countDown == -1:
+                self.startCountDown = False
+
+        if self.startCountDown:
+            text = str(self.countDown / 10) + " s"
+            self.CountdownLabel.setText(text)
+
+
+
+
+    def StartCueDuration(self):
+        self.startCountDown = True
+        if self.countDown == 0:
+            self.startCountDown = False
+
+
+
+    def CueSetup(self):
+        global timer_state
+        global start_delay
+
+        #timer_state = 0 is start delay
+
+        if 0 == 0:
+            self.cueLayout.setCurrentIndex(1)
+            self.countDown = start_delay * 10
+            self.CountdownLabel.setText(str(start_delay))
+            #if self.countDown == -1:
+                #timer_state =1
+        #if timer_state == 1:
+            #self.cueLayout.setCurrentIndex(2)
+            #self.countDown = start_delay * 10
+            #self.CountdownLabel.setText(str(start_delay))
+            #if self.countDown == -1:
+                #timer_state =1
+
+        #if self.get_start_delay() >= 0:
+            #self.cueLayout.setCurrentIndex(1)
+            #self.countDown = self.get_start_delay() * 10
+            #self.CountdownLabel.setText(str(self.get_start_delay()))
+            #start total run time start and only stops when start pressed again
+
+        #if self.get_rest_length() >= 0:
+            #make sure counter from previous if statement is done
+            #so say while counter != 0
+            # time.sleep (5) --> this waits 5 seconds before trying agian-->  make sure to import time
+
+            #self.cueLayout.setCurrentIndex(2)
+            #self.countDown = self.get_rest_length() * 10
+            #self.CountdownLabel.setText(str(self.get_rest_length()))
+
+
+        #if cue_length_updated.end_delay >= 0:
+            #self.cueLayout.setCurrentIndex(2)
+            # start cue counter
+
+
+        #if end_delay_updated.end_delay >= 0:
+            #self.cueLayout.setCurrentIndex(3)
+            # startcue counter
+
+
+
+    #def cue_length_updated(self, i):
+        #self.cue_length = i
+
+    #def end_delay_updated(self, i):
+        #self.end_delay = i
+
+
+
+
+
+    def start_delay_updated(self, str):
+        global start_delay
+        if str:
+            start_delay = int(str)
+
+    #def rest_length_updated(self, str):
+    #    if str:
+        #    self.put_rest_length (int(str))
+
+
+    def blankLabel(self):
+        self.layoutWidgetBlankLabel = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetBlankLabel.setGeometry(QtCore.QRect(80, 50, 341, 41)) #-->adjust dimensions as needed
+        self.layoutWidgetBlankLabel.setObjectName("layoutWidgetBlankLabel")
+
+
+    def startDelayLabel(self):
+        self.layoutWidgetStartDelayLabel = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetStartDelayLabel.setGeometry(QtCore.QRect(80, 50, 341, 41)) #-->adjust dimensions as needed
+        self.layoutWidgetStartDelayLabel.setObjectName("layoutWidgetStartDelayLabel")
+
+        self.start_delay_label = QtWidgets.QLabel(self.layoutWidgetStartDelayLabel)
+        self.start_delay_label.setObjectName("start_delay_label")
+        self.start_delay_label.setText("Wait for experiment to begin...")
+
+    def restLengthLabel(self):
+        self.layoutWidgetRestLengthLabel = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetRestLengthLabel.setGeometry(QtCore.QRect(80, 50, 341, 41))
+        self.layoutWidgetRestLengthLabel.setObjectName("layoutWidgetRestLengthLabel")
+
+        self.rest_length_label = QtWidgets.QLabel(self.layoutWidgetRestLengthLabel)
+        self.rest_length_label.setObjectName("rest_length_label")
+        self.rest_length_label.setText("Eyes Open")
+
+    #def cueLengthLabel(self):
+        #self.layoutWidgetCueLengthLabel = QtWidgets.QWidget(self.frame)
+        #self.layoutWidgetCueLengthLabel.setGeometry(QtCore.QRect(80, 50, 341, 41)) -->adjust dimensions as needed
+        #self.layoutWidgetCueLengthLabel.setObjectName("layoutWidgetCueLengthLabel")
+
+        #self.cue_length_label = QtWidgets.QLabel(self.layoutWidgetCueLengthLabelyLabel)
+        #self.cue_length_label.setObjectName("cue_length_label")
+        #self.cue_length_label.setText("Eyes closed")
+
+    #def endDelayLabel(self):
+        #self.layoutWidgetEndDelayLabel = QtWidgets.QWidget(self.frame)
+        #self.layoutWidgetEndDelayLabel.setGeometry(QtCore.QRect(80, 50, 341, 41)) -->adjust dimensions as needed
+        #self.layoutWidgetEndDelayLabel.setObjectName("layoutWidgetEndDelayLabel")
+
+        #self.end_delay_label = QtWidgets.QLabel(self.layoutWidgetEndDelayLabel)
+        #self.end_delay_label.setObjectName("end_delay_label")
+        #self.end_delay_label.setText("Wait for experiment to end...")
 
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
         self.start_button.setText(_translate("MainWindow", "Start"))
-        self.label_7.setText(_translate("MainWindow", "Prompt"))
+        #self.label_7.setText(_translate("MainWindow", "Prompt"))
         self.label_9.setText(_translate("MainWindow", "Total Run Time"))
         self.label_10.setText(_translate("MainWindow", "TextLabel"))
-        self.label_8.setText(_translate("MainWindow", "Cue Countdown"))
-        self.label_11.setText(_translate("MainWindow", "TextLabel"))
+        #self.label_8.setText(_translate("MainWindow", "Cue Countdown"))
+        #self.label_11.setText(_translate("MainWindow", "TextLabel"))
         self.drop_down_menu.setItemText(0, _translate("MainWindow", "Free Run"))
         self.drop_down_menu.setItemText(1, _translate("MainWindow", "Eye Blinks"))
         self.drop_down_menu.setItemText(2, _translate("MainWindow", "Alpha"))
