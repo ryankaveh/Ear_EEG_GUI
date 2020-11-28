@@ -12,91 +12,68 @@ from PyQt5 import QtCore, QtGui, QtWidgets, sip
 from PyQt5.QtWidgets import QStackedLayout
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
+from time import sleep
+import numpy as np
+import simpleaudio as sa
+import sounddevice as sd
 
 
 
 class Ui_MainWindow(object):
+    #Cue Input Variables
     timer_state = 0
     start_delay = 0
-
-    #def put_start_delay(self,int):
-        #start_delay = int
-
-
-    #def get_start_delay(self):
-        #return start_delay
-
-    #def put_rest_length(self,int):
-        #rest_length = int
+    rest_length = 0
+    cue_length = 0
+    end_delay = 0
+    repetitions = 0
+    click_frequency = 0
+    carrier_frequency = 0
+    AM_frequency = 0
 
 
-    #def get_rest_length(self):
-        #return rest_length
+    #Bottom Frame Index
+    frameindex = 0
+
+    #Run Time Timer and Cue Duration Timer Are Set Off
+    startCountDown = False
+    startCountUp = False
 
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(698, 600)
+        MainWindow.resize(650, 600)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
+
         self.start_button = QtWidgets.QPushButton(self.centralwidget)
         self.start_button.setGeometry(QtCore.QRect(520, 510, 113, 32))
         self.start_button.setObjectName("start_button")
 
-
-
+        #Top Frame Setup
         self.frame = QtWidgets.QFrame(self.centralwidget)
         self.frame.setGeometry(QtCore.QRect(30, 10, 591, 201))
         self.frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
         self.frame.setFrameShadow(QtWidgets.QFrame.Raised)
         self.frame.setObjectName("frame")
-        self.label_7 = QtWidgets.QLabel(self.frame)
-        self.label_7.setGeometry(QtCore.QRect(20, 20, 60, 16))
-        self.label_7.setObjectName("label_7")
-        self.widget = QtWidgets.QWidget(self.frame)
-        self.widget.setGeometry(QtCore.QRect(350, 160, 241, 42))
-        self.widget.setObjectName("widget")
-        self.verticalLayout_7 = QtWidgets.QVBoxLayout(self.widget)
-        self.verticalLayout_7.setContentsMargins(0, 0, 0, 0)
-        self.verticalLayout_7.setObjectName("verticalLayout_7")
-        self.horizontalLayout_5 = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_5.setObjectName("horizontalLayout_5")
-        spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.horizontalLayout_5.addItem(spacerItem)
-        self.label_9 = QtWidgets.QLabel(self.widget)
-        self.label_9.setObjectName("label_9")
-        self.horizontalLayout_5.addWidget(self.label_9)
-        spacerItem1 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.horizontalLayout_5.addItem(spacerItem1)
-        self.label_10 = QtWidgets.QLabel(self.widget)
-        self.label_10.setObjectName("label_10")
-        self.horizontalLayout_5.addWidget(self.label_10)
-        spacerItem2 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.horizontalLayout_5.addItem(spacerItem2)
-        self.verticalLayout_7.addLayout(self.horizontalLayout_5)
-        self.widget_2 = QtWidgets.QWidget(self.frame)
-        self.widget_2.setGeometry(QtCore.QRect(0, 80, 241, 42))
-        self.widget_2.setObjectName("widget_2")
-        self.verticalLayout_6 = QtWidgets.QVBoxLayout(self.widget_2)
-        self.verticalLayout_6.setContentsMargins(0, 0, 0, 0)
-        self.verticalLayout_6.setObjectName("verticalLayout_6")
-        self.horizontalLayout_4 = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_4.setObjectName("horizontalLayout_4")
-        spacerItem3 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.horizontalLayout_4.addItem(spacerItem3)
-        self.label_8 = QtWidgets.QLabel(self.widget_2)
-        self.label_8.setObjectName("label_8")
-        self.horizontalLayout_4.addWidget(self.label_8)
-        spacerItem4 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.horizontalLayout_4.addItem(spacerItem4)
-        self.label_11 = QtWidgets.QLabel(self.widget_2)
-        self.label_11.setObjectName("label_11")
-        self.horizontalLayout_4.addWidget(self.label_11)
-        spacerItem5 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.horizontalLayout_4.addItem(spacerItem5)
-        self.verticalLayout_6.addLayout(self.horizontalLayout_4)
 
 
+        self.RunTimeWidget = QtWidgets.QWidget(self.frame)
+        self.RunTimeWidget.setGeometry(QtCore.QRect(330, 172, 150, 30))
+        self.RunTimeWidget.setObjectName("RunTimeWidget")
 
+
+        self.RunTimeLabel = QtWidgets.QLabel(self.RunTimeWidget)
+        self.RunTimeLabel.setObjectName("RunTimeLabel")
+
+
+        self.CueDurationWidget = QtWidgets.QWidget(self.frame)
+        self.CueDurationWidget.setGeometry(QtCore.QRect(7, 97, 150, 30))
+        self.CueDurationWidget.setObjectName("CueDurationWidget")
+
+        self.CueDurationLabel = QtWidgets.QLabel(self.CueDurationWidget)
+        self.CueDurationLabel.setObjectName("CueDurationLabel")
+
+        #Bottom Frame Setup
         self.frame_2 = QtWidgets.QFrame(self.centralwidget)
         self.frame_2.setGeometry(QtCore.QRect(30, 280, 581, 221))
         self.frame_2.setFrameShape(QtWidgets.QFrame.StyledPanel)
@@ -104,23 +81,22 @@ class Ui_MainWindow(object):
         self.frame_2.setObjectName("frame_2")
 
 
+        self.DropDownMenuWidget = QtWidgets.QWidget(self.centralwidget)
+        self.DropDownMenuWidget.setGeometry(QtCore.QRect(20, 210, 221, 41))
+        self.DropDownMenuWidget.setObjectName("DropDownMenuWidget")
 
-        self.widget_4 = QtWidgets.QWidget(self.centralwidget)
-        self.widget_4.setGeometry(QtCore.QRect(90, 490, 120, 80))
-        self.widget_4.setObjectName("widget_4")
-        self.widget_4.show()
-
-        self.widget_3 = QtWidgets.QWidget(self.centralwidget)
-        self.widget_3.setGeometry(QtCore.QRect(20, 210, 221, 41))
-        self.widget_3.setObjectName("widget_3")
-        self.drop_down_menu = QtWidgets.QComboBox(self.widget_3)
+        self.drop_down_menu = QtWidgets.QComboBox(self.DropDownMenuWidget)
         self.drop_down_menu.setGeometry(QtCore.QRect(10, 20, 184, 26))
         self.drop_down_menu.setObjectName("drop_down_menu")
         self.drop_down_menu.addItem("")
         self.drop_down_menu.addItem("")
         self.drop_down_menu.addItem("")
         self.drop_down_menu.addItem("")
-        MainWindow.setCentralWidget(self.centralwidget)
+        self.drop_down_menu.addItem("")
+        self.drop_down_menu.addItem("")
+
+        MainWindow.setCentralWidget(self.centralwidget) # should fit window
+
         self.menubar = QtWidgets.QMenuBar(MainWindow)
         self.menubar.setGeometry(QtCore.QRect(0, 0, 698, 22))
         self.menubar.setObjectName("menubar")
@@ -132,96 +108,223 @@ class Ui_MainWindow(object):
         MainWindow.setStatusBar(self.statusbar)
 
 
-        #self.put_start_delay(0)
-        #self.put_rest_length(0)
-
-
-        #layout frames
+        #Stacked Layout for Cues in Top Frame
         self.cueLayout = QStackedLayout()
+
+        #Stacked Layouts for Drop Down Menu Layouts in Bottom Frame
         self.mainlayout = QStackedLayout()
         self.mainlayout2 = QStackedLayout()
 
+        #Setup of Cue Label Layouts
         self.layoutWidgetBlankLabel = QtWidgets.QWidget(self.frame)
         self.layoutWidgetStartDelayLabel = QtWidgets.QWidget(self.frame)
-        self.layoutWidgetRestLengthLabel = QtWidgets.QWidget(self.frame)
-        #self.layoutWidgetCueLengthLabel = QtWidgets.QWidget(self.frame)
-        #self.layoutWidgetEndDelayLabel = QtWidgets.QWidget(self.frame)
+
+        self.layoutWidgetRestLengthLabelEyeBlinks = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetRestLengthLabelAlpha = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetRestLengthLabelASSRClicks = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetRestLengthLabelASSRPureTone = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetRestLengthLabelASSRWhiteNoise = QtWidgets.QWidget(self.frame)
+
+        self.layoutWidgetCueLengthLabelEyeBlinks = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetCueLengthLabelAlpha = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetCueLengthLabelASSRClicks = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetCueLengthLabelASSRPureTone = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetCueLengthLabelASSRWhiteNoise = QtWidgets.QWidget(self.frame)
 
 
+        self.layoutWidgetEndDelayLabel = QtWidgets.QWidget(self.frame)
 
+        #Setup of Drop Down Menu Layouts
         self.layoutWidgetFreeRun = QtWidgets.QWidget(self.frame_2)
         self.layoutWidgetFreeRunBlank1 = QtWidgets.QWidget(self.frame_2)
 
         self.layoutWidgetAlphaEye1 = QtWidgets.QWidget(self.frame_2)
         self.layoutWidgetAlphaEye2 = QtWidgets.QWidget(self.frame_2)
 
-        self.layoutWidgetASSR1 = QtWidgets.QWidget(self.frame_2)
-        self.layoutWidgetASSR2 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetASSRClicks1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetASSRClicks2 = QtWidgets.QWidget(self.frame_2)
 
+
+        self.layoutWidgetASSRPureTone1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetASSRPureTone2 = QtWidgets.QWidget(self.frame_2)
+
+
+        self.layoutWidgetASSRWhiteNoise1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetASSRWhiteNoise2 = QtWidgets.QWidget(self.frame_2)
+
+
+        #Setup of All Linedits (& 1 CheckBox) for Bottom Frame
+        self.start_delay_free_run_lineEdit= QtWidgets.QLineEdit(self.layoutWidgetFreeRun)
+        self.start_delay_free_run_lineEdit.setObjectName("start_delay_free_run_lineEdit")
+
+        self.end_delay_alpha_eye_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye1)
+        self.end_delay_alpha_eye_lineEdit.setObjectName("end_delay_alpha_eye_lineEdit")
+
+        self.rest_length_alpha_eye_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye1)
+        self.rest_length_alpha_eye_lineEdit.setObjectName("rest_length_alpha_eye_lineEdit")
+
+        self.start_delay_alpha_eye_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye2)
+        self.start_delay_alpha_eye_lineEdit.setObjectName("start_delay_alpha_eye_lineEdit")
+
+        self.cue_length_alpha_eye_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye2)
+        self.cue_length_alpha_eye_lineEdit.setObjectName("cue_length_alpha_eye_lineEdit")
+
+        self.repetitions_alpha_eye_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye2)
+        self.repetitions_alpha_eye_lineEdit.setObjectName("repetitions_alpha_eye_lineEdit")
+
+        self.cue_audio_alpha_eye_text = QtWidgets.QCheckBox(self.layoutWidgetAlphaEye1)
+        self.cue_audio_alpha_eye_text.setObjectName("cue_audio_alpha_eye_text")
+        self.cue_audio_alpha_eye_text.setText("Cue Audio")
+
+        self.end_delay_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks1)
+        self.end_delay_ASSR_clicks_lineEdit.setObjectName("end_delay_ASSR_clicks_lineEdit")
+
+        self.rest_length_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks1)
+        self.rest_length_ASSR_clicks_lineEdit.setObjectName("rest_length_ASSR_clicks_lineEdit")
+
+        self.start_delay_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks2)
+        self.start_delay_ASSR_clicks_lineEdit.setObjectName("start_delay_ASSR_clicks_lineEdit")
+
+        self.cue_length_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks2)
+        self.cue_length_ASSR_clicks_lineEdit.setObjectName("cue_length_ASSR_clicks_lineEdit")
+
+        self.repetitions_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks2)
+        self.repetitions_ASSR_clicks_lineEdit.setObjectName("repetitions_ASSR_clicks_lineEdit")
+
+        self.click_frequency_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks1)
+        self.click_frequency_ASSR_clicks_lineEdit.setObjectName("click_frequency_ASSR_clicks_lineEdit")
+
+        self.end_delay_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone1)
+        self.end_delay_ASSR_pure_tone_lineEdit.setObjectName("end_delay_ASSR_pure_tone_lineEdit")
+
+        self.rest_length_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone1)
+        self.rest_length_ASSR_pure_tone_lineEdit.setObjectName("rest_length_ASSR_pure_tone_lineEdit")
+
+        self.cue_length_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone2)
+        self.cue_length_ASSR_pure_tone_lineEdit.setObjectName("cue_length_ASSR_pure_tone_lineEdit")
+
+        self.start_delay_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone2)
+        self.start_delay_ASSR_pure_tone_lineEdit.setObjectName("start_delay_ASSR_pure_tone_lineEdit")
+
+        self.repetitions_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone2)
+        self.repetitions_ASSR_pure_tone_lineEdit.setObjectName("repetitions_ASSR_pure_tone_lineEdit")
+
+        self.carrier_frequency_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone1)
+        self.carrier_frequency_ASSR_pure_tone_lineEdit.setObjectName("carrier_frequency_ASSR_pure_tone_lineEdit")
+
+        self.amplitude_modulation_frequency_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone1)
+        self.amplitude_modulation_frequency_ASSR_pure_tone_lineEdit.setObjectName("amplitude_modulation_frequency_ASSR_pure_tone_lineEdit")
+
+        self.end_delay_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise1)
+        self.end_delay_ASSR_white_noise_lineEdit.setObjectName("end_delay_ASSR_white_noise_lineEdit")
+
+        self.rest_length_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise1)
+        self.rest_length_ASSR_white_noise_lineEdit.setObjectName("rest_length_ASSR_white_noise_lineEdit")
+
+        self.start_delay_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise2)
+        self.start_delay_ASSR_white_noise_lineEdit.setObjectName("start_delay_ASSR_white_noise_lineEdit")
+
+        self.cue_length_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise2)
+        self.cue_length_ASSR_white_noise_lineEdit.setObjectName("cue_length_ASSR_white_noise_lineEdit")
+
+        self.repetitions_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise2)
+        self.repetitions_ASSR_white_noise_lineEdit.setObjectName("repetitions_ASSR_white_noise_lineEdit")
+
+        self.amplitude_modulation_frequency_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise1)
+        self.amplitude_modulation_frequency_ASSR_white_noise_lineEdit.setObjectName("amplitude_modulation_frequency_ASSR_white_noise_lineEdit")
+
+
+
+
+        #Functions That Complete Cue Label Layouts
         self.blankLabel()
         self.startDelayLabel()
-        self.restLengthLabel()
-        #self.cueLengthLabel()
-        #self.endDelayLabel()
+        self.restLengthLabelEyeBlinks()
+        self.restLengthLabelAlpha()
 
+        self.restLengthLabelASSRClicks()
+        self.restLengthLabelASSRPureTone()
+        self.restLengthLabelASSRWhiteNoise()
 
+        self.cueLengthLabelEyeBlinks()
+        self.cueLengthLabelAlpha()
+
+        self.cueLengthLabelASSRClicks()
+        self.cueLengthLabelASSRPureTone()
+        self.cueLengthLabelASSRWhiteNoise()
+
+        self.endDelayLabel()
+
+        #Functions That Create the Layouts For Each Drop Down Menu Option
         self.free_run()
         self.alpha_or_eye_blink()
-        self.ASSR()
+        self.ASSRClicks()
+        self.ASSRPureTone()
+        self.ASSRWhiteNoise()
 
+        #Adding Cue Label Layouts to QStackedLayout for Cues
         self.cueLayout.addWidget(self.layoutWidgetBlankLabel)
         self.cueLayout.addWidget(self.layoutWidgetStartDelayLabel)
-        self.cueLayout.addWidget(self.layoutWidgetRestLengthLabel)
-        #self.cueLayout.addWidget(self.layoutWidgetCueLengthLabel)
-        #self.cueLayout.addWidget(self.layoutWidgetEndDelayLabel)
+        self.cueLayout.addWidget(self.layoutWidgetRestLengthLabelEyeBlinks)
+        self.cueLayout.addWidget(self.layoutWidgetRestLengthLabelAlpha)
+        self.cueLayout.addWidget(self.layoutWidgetRestLengthLabelASSRClicks)
+        self.cueLayout.addWidget(self.layoutWidgetRestLengthLabelASSRPureTone)
+        self.cueLayout.addWidget(self.layoutWidgetRestLengthLabelASSRWhiteNoise)
+        self.cueLayout.addWidget(self.layoutWidgetCueLengthLabelEyeBlinks)
+        self.cueLayout.addWidget(self.layoutWidgetCueLengthLabelAlpha)
+        self.cueLayout.addWidget(self.layoutWidgetCueLengthLabelASSRClicks)
+        self.cueLayout.addWidget(self.layoutWidgetCueLengthLabelASSRPureTone)
+        self.cueLayout.addWidget(self.layoutWidgetCueLengthLabelASSRWhiteNoise)
+        self.cueLayout.addWidget(self.layoutWidgetEndDelayLabel)
 
+        #Adding Drop Down Menu Layouts to  QStackedLayour for Drop Down Menu
         self.mainlayout.addWidget(self.layoutWidgetFreeRun)
         self.mainlayout.addWidget(self.layoutWidgetAlphaEye1)
         self.mainlayout.addWidget(self.layoutWidgetAlphaEye1)
-        self.mainlayout.addWidget(self.layoutWidgetASSR1)
+        self.mainlayout.addWidget(self.layoutWidgetASSRClicks1)
+        self.mainlayout.addWidget(self.layoutWidgetASSRPureTone1)
+        self.mainlayout.addWidget(self.layoutWidgetASSRWhiteNoise1)
 
         self.mainlayout2.addWidget(self.layoutWidgetFreeRunBlank1)
         self.mainlayout2.addWidget(self.layoutWidgetAlphaEye2)
         self.mainlayout2.addWidget(self.layoutWidgetAlphaEye2)
-        self.mainlayout2.addWidget(self.layoutWidgetASSR2)
-
-
-
+        self.mainlayout2.addWidget(self.layoutWidgetASSRClicks2)
+        self.mainlayout.addWidget(self.layoutWidgetASSRPureTone2)
+        self.mainlayout.addWidget(self.layoutWidgetASSRWhiteNoise2)
 
         self.retranslateUi(MainWindow)
 
+        #Clicking on Drop Down Menu causes a change in the Bottom Frame
         self.drop_down_menu.activated['int'].connect(self.frameChange)
-        self.start_button.clicked.connect(self.CueSetup)
+
+
+        #Run Time Duration Setup
+        self.runTimeCount = int
+        self.countUp = 0
+        self.startCountUp = False
+
+        self.CountUpLabel = QtWidgets.QLabel("Run Time Duration", self)
+        self.CountUpLabel.setGeometry(465, 175, 150, 30)
+        self.CountUpLabel.setStyleSheet("border : 2px solid black")
+        self.CountUpLabel.setAlignment(Qt.AlignCenter)
+
+        #Clicking on Start Button Starts Run Time Timer
+        self.start_button.clicked.connect(self.RunTimeDurationSetup)
 
         #Count Down Timer Setup
-
-        #self.start_delay = 0
-        #self.rest_length = 0
-
-
         self.count = int
         self.countDown = 0
         self.startCountDown = False
 
         self.CountdownLabel = QtWidgets.QLabel("Cue Duration", self)
-
-
-        self.CountdownLabel.setGeometry(40, 100, 150, 30)
+        self.CountdownLabel.setGeometry(130, 100, 150, 30)
         self.CountdownLabel.setStyleSheet("border : 2px solid black")
         self.CountdownLabel.setAlignment(Qt.AlignCenter)
 
-
-        self.start_button.clicked.connect(self.StartCueDuration)
-
-        CueDurationTimer = QTimer(self)
-        CueDurationTimer.timeout.connect(self.showTime)
-        CueDurationTimer.start(100)
-
-
+        #Clicking on Start Button Starts Implements Cues in Top Frame
+        self.start_button.clicked.connect(self.CueSetup)
 
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
-
-
 
 
     def free_run(self):
@@ -244,12 +347,12 @@ class Ui_MainWindow(object):
 
         self.horizontalLayout.addWidget(self.start_delay_text)
 
-        self.start_delay_lineEdit= QtWidgets.QLineEdit(self.layoutWidgetFreeRun)
-        self.start_delay_lineEdit.setObjectName("start_delay_lineEdit")
+        #self.start_delay_Free_Run_lineEdit= QtWidgets.QLineEdit(self.layoutWidgetFreeRun)
+        #self.start_delay_free_run_lineEdit.setObjectName("start_delay_free_run_lineEdit")
 
-        self.start_delay_lineEdit.textChanged.connect(self.start_delay_updated)
+        self.start_delay_free_run_lineEdit.textChanged.connect(self.start_delay_updated)
 
-        self.horizontalLayout.addWidget(self.start_delay_lineEdit)
+        self.horizontalLayout.addWidget(self.start_delay_free_run_lineEdit)
 
         self.verticalLayout.addLayout(self.horizontalLayout)
 
@@ -261,9 +364,9 @@ class Ui_MainWindow(object):
         self.layoutWidgetAlphaEye1.setObjectName("layoutWidgetAlphaEye1")
 
 
-        self.verticalLayout_Right = QtWidgets.QVBoxLayout(self.layoutWidgetAlphaEye1)
-        self.verticalLayout_Right.setContentsMargins(0, 0, 0, 0)
-        self.verticalLayout_Right.setObjectName("verticalLayout_Right")
+        self.verticalLayoutRightAlphaEye = QtWidgets.QVBoxLayout(self.layoutWidgetAlphaEye1)
+        self.verticalLayoutRightAlphaEye.setContentsMargins(0, 0, 0, 0)
+        self.verticalLayoutRightAlphaEye.setObjectName("verticalLayoutRightAlphaEye")
 
 
         self.horizontalLayoutRightTop = QtWidgets.QHBoxLayout()
@@ -291,39 +394,39 @@ class Ui_MainWindow(object):
         self.verticalLayout_Right2= QtWidgets.QVBoxLayout()
         self.verticalLayout_Right2.setObjectName("verticalLayout_Right2")
 
-        self.end_delay_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye1)
-        self.end_delay_lineEdit.setObjectName("end_delay_lineEdit")
+        #self.end_delay_alpha_eye_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye1)
+        #self.end_delay_alpha_eye_lineEdit.setObjectName("end_delay_lalpha_eye_ineEdit")
 
-        #self.end_delay_lineEdit.textChanged.connect(self.end_delay_updated)
+        self.end_delay_alpha_eye_lineEdit.textChanged.connect(self.end_delay_updated)
 
-        self.verticalLayout_Right2.addWidget(self.end_delay_lineEdit)
+        self.verticalLayout_Right2.addWidget(self.end_delay_alpha_eye_lineEdit)
 
-        self.rest_length_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye1)
-        self.rest_length_lineEdit.setObjectName("rest_length_lineEdit")
+        #self.rest_length_alpha_eye_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye1)
+        #self.rest_length_alpha_eye_lineEdit.setObjectName("rest_length_alpha_eye_lineEdit")
 
-        #self.rest_length_lineEdit.textChanged.connect(self.rest_length_updated)
+        self.rest_length_alpha_eye_lineEdit.textChanged.connect(self.rest_length_updated)
 
-        self.verticalLayout_Right2.addWidget(self.rest_length_lineEdit)
+        self.verticalLayout_Right2.addWidget(self.rest_length_alpha_eye_lineEdit)
 
         self.horizontalLayoutRightTop.addLayout(self.verticalLayout_Right2)
 
-        self.verticalLayout_Right.addLayout(self.horizontalLayoutRightTop)
+        self.verticalLayoutRightAlphaEye.addLayout(self.horizontalLayoutRightTop)
 
-        self.cue_audio_text = QtWidgets.QCheckBox(self.layoutWidgetAlphaEye1)
-        self.cue_audio_text.setObjectName("cue_audio_text")
-        self.cue_audio_text.setText("Cue Audio")
+        #self.cue_audio_alpha_eye_text = QtWidgets.QCheckBox(self.layoutWidgetAlphaEye1)
+        #self.cue_audio_alpha_eye_text.setObjectName("cue_audio_alpha_eye_text")
+        #self.cue_audio_alpha_eye_text.setText("Cue Audio")
 
 
-        self.verticalLayout_Right.addWidget(self.cue_audio_text)
+        self.verticalLayoutRightAlphaEye.addWidget(self.cue_audio_alpha_eye_text)
 
         self.layoutWidgetAlphaEye2 = QtWidgets.QWidget(self.frame_2)
         self.layoutWidgetAlphaEye2.setGeometry(QtCore.QRect(50, 20, 211, 87))
         self.layoutWidgetAlphaEye2.setObjectName("layoutWidgetAlphaEye2")
 
 
-        self.horizontalLayoutLeft = QtWidgets.QHBoxLayout(self.layoutWidgetAlphaEye2)
-        self.horizontalLayoutLeft.setContentsMargins(0, 0, 0, 0)
-        self.horizontalLayoutLeft.setObjectName("horizontalLayoutLeft")
+        self.horizontalLayoutLeftAlphaEye = QtWidgets.QHBoxLayout(self.layoutWidgetAlphaEye2)
+        self.horizontalLayoutLeftAlphaEye.setContentsMargins(0, 0, 0, 0)
+        self.horizontalLayoutLeftAlphaEye.setObjectName("horizontalLayoutLeftAlphaEye")
 
         self.verticalLayoutLeft1 = QtWidgets.QVBoxLayout()
         self.verticalLayoutLeft1.setObjectName("verticalLayoutLeft1")
@@ -349,45 +452,46 @@ class Ui_MainWindow(object):
 
         self.verticalLayoutLeft1.addWidget(self.repetitions_text)
 
-        self.horizontalLayoutLeft.addLayout(self.verticalLayoutLeft1)
+        self.horizontalLayoutLeftAlphaEye.addLayout(self.verticalLayoutLeft1)
 
         self.verticalLayoutLeft2 = QtWidgets.QVBoxLayout()
         self.verticalLayoutLeft2.setObjectName("verticalLayoutLeft2")
 
-        self.start_delay_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye2)
-        self.start_delay_lineEdit.setObjectName("start_delay_lineEdit")
+        #self.start_delay_alpha_eye_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye2)
+        #self.start_delay_alpha_eye_lineEdit.setObjectName("start_delay_alpha_eye_lineEdit")
 
-        self.start_delay_lineEdit.textChanged.connect(self.start_delay_updated)
+        self.start_delay_alpha_eye_lineEdit.textChanged.connect(self.start_delay_updated)
 
-        self.verticalLayoutLeft2.addWidget(self.start_delay_lineEdit)
+        self.verticalLayoutLeft2.addWidget(self.start_delay_alpha_eye_lineEdit)
 
-        self.cue_length_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye2)
-        self.cue_length_lineEdit.setObjectName("cue_length_lineEdit")
+        #self.cue_length_alpha_eye_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye2)
+        #self.cue_length_alpha_eye_lineEdit.setObjectName("cue_length_alpha_eye_lineEdit")
 
-        #self.cue_length_lineEdit.textChanged.connect(self.cue_length_updated)
+        self.cue_length_alpha_eye_lineEdit.textChanged.connect(self.cue_length_updated)
 
-        self.verticalLayoutLeft2.addWidget(self.cue_length_lineEdit)
+        self.verticalLayoutLeft2.addWidget(self.cue_length_alpha_eye_lineEdit)
 
-        self.repetitions_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye2)
-        self.repetitions_lineEdit.setObjectName("repetitions_lineEdit")
+        #self.repetitions_alpha_eye_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetAlphaEye2)
+        #self.repetitions_alpha_eye_lineEdit.setObjectName("repetitions_alpha_eye_lineEdit")
 
+        self.repetitions_alpha_eye_lineEdit.textChanged.connect(self.repetitions_updated)
 
-        self.verticalLayoutLeft2.addWidget(self.repetitions_lineEdit)
+        self.verticalLayoutLeft2.addWidget(self.repetitions_alpha_eye_lineEdit)
 
-        self.horizontalLayoutLeft.addLayout(self.verticalLayoutLeft2)
-
-
-    def ASSR(self):
-
-        self.layoutWidgetASSR1 = QtWidgets.QWidget(self.frame_2)
-        self.layoutWidgetASSR1.setGeometry(QtCore.QRect(300, 20, 225, 140)) #84 --> 140
-        self.layoutWidgetASSR1.setObjectName("layoutWidgetASSR1")
-        self.layoutWidgetASSR1.show()
+        self.horizontalLayoutLeftAlphaEye.addLayout(self.verticalLayoutLeft2)
 
 
-        self.verticalLayoutRight = QtWidgets.QVBoxLayout(self.layoutWidgetASSR1)
-        self.verticalLayoutRight.setContentsMargins(0, 0, 0, 0)
-        self.verticalLayoutRight.setObjectName("verticalLayoutRight")
+    def ASSRClicks(self):
+
+        self.layoutWidgetASSRClicks1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetASSRClicks1.setGeometry(QtCore.QRect(300, 20, 225, 84)) #84 --> 140
+        self.layoutWidgetASSRClicks1.setObjectName("layoutWidgetASSRClicks1")
+        self.layoutWidgetASSRClicks1.show()
+
+
+        self.verticalLayoutRightASSRClicks = QtWidgets.QVBoxLayout(self.layoutWidgetASSRClicks1)
+        self.verticalLayoutRightASSRClicks.setContentsMargins(0, 0, 0, 0)
+        self.verticalLayoutRightASSRClicks.setObjectName("verticalLayoutRightASSRClicks")
 
 
         self.horizontalLayoutRightTop = QtWidgets.QHBoxLayout()
@@ -396,30 +500,192 @@ class Ui_MainWindow(object):
         self.verticalLayoutRight1 = QtWidgets.QVBoxLayout()
         self.verticalLayoutRight1.setObjectName("verticalLayoutRight1")
 
-        self.end_delay_text = QtWidgets.QLabel(self.layoutWidgetASSR1)
+        self.end_delay_text = QtWidgets.QLabel(self.layoutWidgetASSRClicks1)
         self.end_delay_text.setObjectName("end_delay_text")
         self.end_delay_text.setText("End Delay")
 
 
         self.verticalLayoutRight1.addWidget(self.end_delay_text)
 
-        self.rest_length_text = QtWidgets.QLabel(self.layoutWidgetASSR1)
+        self.rest_length_text = QtWidgets.QLabel(self.layoutWidgetASSRClicks1)
         self.rest_length_text.setObjectName("rest_length_text")
         self.rest_length_text.setText("Rest Length")
 
 
         self.verticalLayoutRight1.addWidget(self.rest_length_text)
 
-        self.carrier_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSR1)
+        self.click_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSRClicks1)
+        self.click_frequency_text.setObjectName("click_frequency_text")
+        self.click_frequency_text.setText("Click Frequency")
+
+
+        self.verticalLayoutRight1.addWidget(self.click_frequency_text)
+
+        #self.amplitude_modulation_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSRClicks1)
+        #self.amplitude_modulation_frequency_text.setObjectName("amplitude_modulation_frequency_text")
+        #self.amplitude_modulation_frequency_text.setText("Amp. Frequency")
+
+        #self.amplitude_modulation_frequency_text.setWordWrap(True)
+
+        #self.verticalLayoutRight1.addWidget(self.amplitude_modulation_frequency_text)
+
+        self.horizontalLayoutRightTop.addLayout(self.verticalLayoutRight1)
+
+        self.verticalLayoutRight2 = QtWidgets.QVBoxLayout()
+        self.verticalLayoutRight2.setObjectName("verticalLayoutRight2")
+
+        #self.end_delay_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks1)
+        #self.end_delay_ASSR_clicks_lineEdit.setObjectName("end_delay_ASSR_clicks_lineEdit")
+
+        self.end_delay_ASSR_clicks_lineEdit.textChanged.connect(self.end_delay_updated)
+
+        self.verticalLayoutRight2.addWidget(self.end_delay_ASSR_clicks_lineEdit)
+
+        #self.rest_length_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks1)
+        #self.rest_length_ASSR_clicks_lineEdit.setObjectName("rest_length_ASSR_clicks_lineEdit")
+
+        self.rest_length_ASSR_clicks_lineEdit.textChanged.connect(self.rest_length_updated)
+
+        self.verticalLayoutRight2.addWidget(self.rest_length_ASSR_clicks_lineEdit)
+
+        #self.click_frequency_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks1)
+        #self.click_frequency_ASSR_clicks_lineEdit.setObjectName("click_frequency_ASSR_clicks_lineEdit")
+
+        self.click_frequency_ASSR_clicks_lineEdit.textChanged.connect(self.click_frequency_updated)
+
+        self.verticalLayoutRight2.addWidget(self.click_frequency_ASSR_clicks_lineEdit)
+
+        #self.amplitude_modulation_frequency_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks1)
+        #self.amplitude_modulation_frequency_lineEdit.setObjectName("amplitude_modulation_frequency_lineEdit")
+
+        #self.verticalLayoutRight2.addWidget(self.amplitude_modulation_frequency_lineEdit)
+
+        self.horizontalLayoutRightTop.addLayout(self.verticalLayoutRight2)
+
+        self.verticalLayoutRightASSRClicks.addLayout(self.horizontalLayoutRightTop)
+
+        #self.cue_audio_text = QtWidgets.QCheckBox(self.layoutWidgetASSRClicks1)
+        #self.cue_audio_text.setObjectName("cue_audio_text")
+        #self.cue_audio_text.setText("Cue Audio")
+
+        #self.verticalLayoutRight.addWidget(self.cue_audio_text)
+
+        self.layoutWidgetASSRClicks2 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetASSRClicks2.setGeometry(QtCore.QRect(50, 20, 211, 87))
+        self.layoutWidgetASSRClicks2.setObjectName("layoutWidgetASSRClicks2")
+
+
+        self.horizontalLayoutLeftASSRClicks = QtWidgets.QHBoxLayout(self.layoutWidgetASSRClicks2)
+        self.horizontalLayoutLeftASSRClicks.setContentsMargins(0, 0, 0, 0)
+        self.horizontalLayoutLeftASSRClicks.setObjectName("horizontalLayoutLeftASSRClicks")
+
+        self.verticalLayoutLeft1 = QtWidgets.QVBoxLayout()
+        self.verticalLayoutLeft1.setObjectName("verticalLayout")
+
+        self.start_delay_text = QtWidgets.QLabel(self.layoutWidgetASSRClicks2)
+        self.start_delay_text.setObjectName("start_delay_text")
+        self.start_delay_text.setText("Start Delay")
+
+
+        self.verticalLayoutLeft1.addWidget(self.start_delay_text)
+
+        self.cue_length_text = QtWidgets.QLabel(self.layoutWidgetASSRClicks2)
+        self.cue_length_text.setObjectName("cue_length_text")
+        self.cue_length_text.setText("Cue Length")
+
+
+        self.verticalLayoutLeft1.addWidget(self.cue_length_text)
+
+        self.repetitions_text = QtWidgets.QLabel(self.layoutWidgetASSRClicks2)
+        self.repetitions_text.setObjectName("repetitions_text")
+        self.repetitions_text.setText("Repetitions")
+
+
+        self.verticalLayoutLeft1.addWidget(self.repetitions_text)
+
+        #self.carrier_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSRClicks2)
+        #self.carrier_frequency_text.setObjectName("carrier_frequency_text")
+        #self.carrier_frequency_text.setText("Carrier Frequency")
+
+        #self.verticalLayoutLeft1.addWidget(self.carrier_frequency_text)
+
+        self.horizontalLayoutLeftASSRClicks.addLayout(self.verticalLayoutLeft1)
+
+        self.verticalLayoutLeft2 = QtWidgets.QVBoxLayout()
+        self.verticalLayoutLeft2.setObjectName("verticalLayoutLeft2")
+
+        #self.start_delay_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks2)
+        #self.start_delay_ASSR_clicks_lineEdit.setObjectName("start_delay_ASSR_clicks_lineEdit")
+
+        self.start_delay_ASSR_clicks_lineEdit.textChanged.connect(self.start_delay_updated)
+
+        self.verticalLayoutLeft2.addWidget(self.start_delay_ASSR_clicks_lineEdit)
+
+        #self.cue_length_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks2)
+        #self.cue_length_ASSR_clicks_lineEdit.setObjectName("cue_length_ASSR_clicks_lineEdit")
+
+        self.cue_length_ASSR_clicks_lineEdit.textChanged.connect(self.cue_length_updated)
+
+        self.verticalLayoutLeft2.addWidget(self.cue_length_ASSR_clicks_lineEdit)
+
+        #self.repetitions_ASSR_clicks_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks2)
+        #self.repetitions_ASSR_clicks_lineEdit.setObjectName("repetitions_ASSR_clicks_lineEdit")
+
+        self.repetitions_ASSR_clicks_lineEdit.textChanged.connect(self.repetitions_updated)
+
+        self.verticalLayoutLeft2.addWidget(self.repetitions_ASSR_clicks_lineEdit)
+
+        #self.carrier_frequency_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRClicks2)
+        #self.carrier_frequency_lineEdit.setObjectName("carrier_frequency_lineEdit")
+
+        #self.verticalLayoutLeft2.addWidget(self.carrier_frequency_lineEdit)
+
+        self.horizontalLayoutLeftASSRClicks.addLayout(self.verticalLayoutLeft2)
+
+
+    def ASSRPureTone(self):
+
+        self.layoutWidgetASSRPureTone1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetASSRPureTone1.setGeometry(QtCore.QRect(300, 20, 225, 112)) #84 --> 140
+        self.layoutWidgetASSRPureTone1.setObjectName("layoutWidgetASSRPureTone1")
+        self.layoutWidgetASSRPureTone1.show()
+
+
+        self.verticalLayoutRightASSRPureTone = QtWidgets.QVBoxLayout(self.layoutWidgetASSRPureTone1)
+        self.verticalLayoutRightASSRPureTone.setContentsMargins(0, 0, 0, 0)
+        self.verticalLayoutRightASSRPureTone.setObjectName("verticalLayoutRightASSRPureTone")
+
+
+        self.horizontalLayoutRightTop = QtWidgets.QHBoxLayout()
+        self.horizontalLayoutRightTop.setObjectName("horizontalLayoutRightTop")
+
+        self.verticalLayoutRight1 = QtWidgets.QVBoxLayout()
+        self.verticalLayoutRight1.setObjectName("verticalLayoutRight1")
+
+        self.end_delay_text = QtWidgets.QLabel(self.layoutWidgetASSRPureTone1)
+        self.end_delay_text.setObjectName("end_delay_text")
+        self.end_delay_text.setText("End Delay")
+
+
+        self.verticalLayoutRight1.addWidget(self.end_delay_text)
+
+        self.rest_length_text = QtWidgets.QLabel(self.layoutWidgetASSRPureTone1)
+        self.rest_length_text.setObjectName("rest_length_text")
+        self.rest_length_text.setText("Rest Length")
+
+
+        self.verticalLayoutRight1.addWidget(self.rest_length_text)
+
+        self.carrier_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSRPureTone1)
         self.carrier_frequency_text.setObjectName("carrier_frequency_text")
         self.carrier_frequency_text.setText("Carrier Frequency")
 
 
         self.verticalLayoutRight1.addWidget(self.carrier_frequency_text)
 
-        self.amplitude_modulation_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSR1)
+        self.amplitude_modulation_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSRPureTone1)
         self.amplitude_modulation_frequency_text.setObjectName("amplitude_modulation_frequency_text")
-        self.amplitude_modulation_frequency_text.setText("Amp. Frequency")
+        self.amplitude_modulation_frequency_text.setText("AM Frequency")
 
         self.amplitude_modulation_frequency_text.setWordWrap(True)
 
@@ -430,123 +696,314 @@ class Ui_MainWindow(object):
         self.verticalLayoutRight2 = QtWidgets.QVBoxLayout()
         self.verticalLayoutRight2.setObjectName("verticalLayoutRight2")
 
-        self.end_delay_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR1)
-        self.end_delay_lineEdit.setObjectName("end_delay_lineEdit")
+        #self.end_delay_ASSR_Pure_Tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone1)
+        #self.end_delay_ASSR_Pure_Tone_lineEdit.setObjectName("end_delay_ASSR_Pure_Tone_lineEdit")
 
-        #self.end_delay_lineEdit.textChanged.connect(self.end_delay_updated)
+        self.end_delay_ASSR_pure_tone_lineEdit.textChanged.connect(self.end_delay_updated)
 
-        self.verticalLayoutRight2.addWidget(self.end_delay_lineEdit)
+        self.verticalLayoutRight2.addWidget(self.end_delay_ASSR_pure_tone_lineEdit)
 
-        self.rest_length_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR1)
-        self.rest_length_lineEdit.setObjectName("rest_length_lineEdit")
+        #self.rest_length_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone1)
+        #self.rest_length_ASSR_pure_tone_lineEdit.setObjectName("rest_length_ASSR_pure_tone_lineEdit")
 
-        #self.rest_length_lineEdit.textChanged.connect(self.rest_length_updated)
+        self.rest_length_ASSR_pure_tone_lineEdit.textChanged.connect(self.rest_length_updated)
 
-        self.verticalLayoutRight2.addWidget(self.rest_length_lineEdit)
+        self.verticalLayoutRight2.addWidget(self.rest_length_ASSR_pure_tone_lineEdit)
 
-        self.carrier_frequency_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR1)
-        self.carrier_frequency_lineEdit.setObjectName("carrier_frequency_lineEdit")
+        #self.carrier_frequency_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone1)
+        #self.carrier_frequency_ASSR_pure_tone_lineEdit.setObjectName("carrier_frequency_ASSR_pure_tone_lineEdit")
 
-        self.verticalLayoutRight2.addWidget(self.carrier_frequency_lineEdit)
+        self.carrier_frequency_ASSR_pure_tone_lineEdit.textChanged.connect(self.carrier_frequency_updated)
 
-        self.amplitude_modulation_frequency_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR1)
-        self.amplitude_modulation_frequency_lineEdit.setObjectName("amplitude_modulation_frequency_lineEdit")
+        self.verticalLayoutRight2.addWidget(self.carrier_frequency_ASSR_pure_tone_lineEdit)
 
-        self.verticalLayoutRight2.addWidget(self.amplitude_modulation_frequency_lineEdit)
+        #self.amplitude_modulation_frequency_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone1)
+        #self.amplitude_modulation_frequency_ASSR_pure_tone_lineEdit.setObjectName("amplitude_modulation_frequency_ASSR_pure_tone_lineEdit")
+
+        self.amplitude_modulation_frequency_ASSR_pure_tone_lineEdit.textChanged.connect(self.AM_frequency_updated)
+
+        self.verticalLayoutRight2.addWidget(self.amplitude_modulation_frequency_ASSR_pure_tone_lineEdit)
 
         self.horizontalLayoutRightTop.addLayout(self.verticalLayoutRight2)
 
-        self.verticalLayoutRight.addLayout(self.horizontalLayoutRightTop)
+        self.verticalLayoutRightASSRPureTone.addLayout(self.horizontalLayoutRightTop)
 
-        self.cue_audio_text = QtWidgets.QCheckBox(self.layoutWidgetASSR1)
-        self.cue_audio_text.setObjectName("cue_audio_text")
-        self.cue_audio_text.setText("Cue Audio")
+        #self.cue_audio_text = QtWidgets.QCheckBox(self.layoutWidgetASSRPureTone1)
+        #self.cue_audio_text.setObjectName("cue_audio_text")
+        #self.cue_audio_text.setText("Cue Audio")
 
-        self.verticalLayoutRight.addWidget(self.cue_audio_text)
+        #self.verticalLayoutRight.addWidget(self.cue_audio_text)
 
-        self.layoutWidgetASSR2 = QtWidgets.QWidget(self.frame_2)
-        self.layoutWidgetASSR2.setGeometry(QtCore.QRect(50, 20, 211, 115))
-        self.layoutWidgetASSR2.setObjectName("layoutWidgetASSR2")
+        self.layoutWidgetASSRPureTone2 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetASSRPureTone2.setGeometry(QtCore.QRect(50, 20, 211, 87)) #115
+        self.layoutWidgetASSRPureTone2.setObjectName("layoutWidgetASSRPureTone2")
 
 
-        self.horizontalLayoutLeft = QtWidgets.QHBoxLayout(self.layoutWidgetASSR2)
-        self.horizontalLayoutLeft.setContentsMargins(0, 0, 0, 0)
-        self.horizontalLayoutLeft.setObjectName("horizontalLayoutLeft")
+        self.horizontalLayoutLeftASSRPureTone = QtWidgets.QHBoxLayout(self.layoutWidgetASSRPureTone2)
+        self.horizontalLayoutLeftASSRPureTone.setContentsMargins(0, 0, 0, 0)
+        self.horizontalLayoutLeftASSRPureTone.setObjectName("horizontalLayoutLeftASSRPureTone")
 
         self.verticalLayoutLeft1 = QtWidgets.QVBoxLayout()
         self.verticalLayoutLeft1.setObjectName("verticalLayout")
 
-        self.start_delay_text = QtWidgets.QLabel(self.layoutWidgetASSR2)
+        self.start_delay_text = QtWidgets.QLabel(self.layoutWidgetASSRPureTone2)
         self.start_delay_text.setObjectName("start_delay_text")
         self.start_delay_text.setText("Start Delay")
 
 
         self.verticalLayoutLeft1.addWidget(self.start_delay_text)
 
-        self.cue_length_text = QtWidgets.QLabel(self.layoutWidgetASSR2)
+        self.cue_length_text = QtWidgets.QLabel(self.layoutWidgetASSRPureTone2)
         self.cue_length_text.setObjectName("cue_length_text")
         self.cue_length_text.setText("Cue Length")
 
 
         self.verticalLayoutLeft1.addWidget(self.cue_length_text)
 
-        self.repetitions_text = QtWidgets.QLabel(self.layoutWidgetASSR2)
+        self.repetitions_text = QtWidgets.QLabel(self.layoutWidgetASSRPureTone2)
         self.repetitions_text.setObjectName("repetitions_text")
         self.repetitions_text.setText("Repetitions")
 
 
         self.verticalLayoutLeft1.addWidget(self.repetitions_text)
 
-        self.click_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSR2)
+        #self.click_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSRPureTone2)
+        #self.click_frequency_text.setObjectName("click_frequency_text")
+        #self.click_frequency_text.setText("Click Frequency")
+
+        #self.verticalLayoutLeft1.addWidget(self.click_frequency_text)
+
+        self.horizontalLayoutLeftASSRPureTone.addLayout(self.verticalLayoutLeft1)
+
+        self.verticalLayoutLeft2 = QtWidgets.QVBoxLayout()
+        self.verticalLayoutLeft2.setObjectName("verticalLayoutLeft2")
+
+        #self.start_delay_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone2)
+        #self.start_delay_ASSR_pure_tone_lineEdit.setObjectName("start_delay_ASSR_pure_tone_lineEdit")
+
+        self.start_delay_ASSR_pure_tone_lineEdit.textChanged.connect(self.start_delay_updated)
+
+        self.verticalLayoutLeft2.addWidget(self.start_delay_ASSR_pure_tone_lineEdit)
+
+        #self.cue_length_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone2)
+        #self.cue_length_ASSR_pure_tone_lineEdit.setObjectName("cue_length_ASSR_pure_tone_lineEdit")
+
+        self.cue_length_ASSR_pure_tone_lineEdit.textChanged.connect(self.cue_length_updated)
+
+        self.verticalLayoutLeft2.addWidget(self.cue_length_ASSR_pure_tone_lineEdit)
+
+        #self.repetitions_ASSR_pure_tone_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone2)
+        #self.repetitions_ASSR_pure_tone_lineEdit.setObjectName("repetitions_ASSR_pure_tone_lineEdit")
+
+        self.repetitions_ASSR_pure_tone_lineEdit.textChanged.connect(self.repetitions_updated)
+
+        self.verticalLayoutLeft2.addWidget(self.repetitions_ASSR_pure_tone_lineEdit)
+
+        #self.click_frequency_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRPureTone2)
+        #self.click_frequency_lineEdit.setObjectName("click_frequency_lineEdit")
+
+        #self.verticalLayoutLeft2.addWidget(self.click_frequency_lineEdit)
+
+        self.horizontalLayoutLeftASSRPureTone.addLayout(self.verticalLayoutLeft2)
+
+    def ASSRWhiteNoise(self):
+
+        self.layoutWidgetASSRWhiteNoise1 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetASSRWhiteNoise1.setGeometry(QtCore.QRect(300, 20, 225, 84)) #84 --> 140
+        self.layoutWidgetASSRWhiteNoise1.setObjectName("layoutWidgetASSRWhiteNoise1")
+        self.layoutWidgetASSRWhiteNoise1.show()
+
+
+        self.verticalLayoutRightASSRWhiteNoise = QtWidgets.QVBoxLayout(self.layoutWidgetASSRWhiteNoise1)
+        self.verticalLayoutRightASSRWhiteNoise.setContentsMargins(0, 0, 0, 0)
+        self.verticalLayoutRightASSRWhiteNoise.setObjectName("verticalLayoutRightASSRWhiteNoise")
+
+
+        self.horizontalLayoutRightTop = QtWidgets.QHBoxLayout()
+        self.horizontalLayoutRightTop.setObjectName("horizontalLayoutRightTop")
+
+        self.verticalLayoutRight1 = QtWidgets.QVBoxLayout()
+        self.verticalLayoutRight1.setObjectName("verticalLayoutRight1")
+
+        self.end_delay_text = QtWidgets.QLabel(self.layoutWidgetASSRWhiteNoise1)
+        self.end_delay_text.setObjectName("end_delay_text")
+        self.end_delay_text.setText("End Delay")
+
+
+        self.verticalLayoutRight1.addWidget(self.end_delay_text)
+
+        self.rest_length_text = QtWidgets.QLabel(self.layoutWidgetASSRWhiteNoise1)
+        self.rest_length_text.setObjectName("rest_length_text")
+        self.rest_length_text.setText("Rest Length")
+
+
+        self.verticalLayoutRight1.addWidget(self.rest_length_text)
+
+        #self.carrier_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSRWhiteNoise1)
+        #self.carrier_frequency_text.setObjectName("carrier_frequency_text")
+        #self.carrier_frequency_text.setText("Carrier Frequency")
+
+
+        #self.verticalLayoutRight1.addWidget(self.carrier_frequency_text)
+
+        self.amplitude_modulation_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSRWhiteNoise1)
+        self.amplitude_modulation_frequency_text.setObjectName("amplitude_modulation_frequency_text")
+        self.amplitude_modulation_frequency_text.setText("AM Frequency")
+
+        self.amplitude_modulation_frequency_text.setWordWrap(True)
+
+        self.verticalLayoutRight1.addWidget(self.amplitude_modulation_frequency_text)
+
+        self.horizontalLayoutRightTop.addLayout(self.verticalLayoutRight1)
+
+        self.verticalLayoutRight2 = QtWidgets.QVBoxLayout()
+        self.verticalLayoutRight2.setObjectName("verticalLayoutRight2")
+
+        #self.end_delay_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise1)
+        #self.end_delay_ASSR_white_noise_lineEdit.setObjectName("end_delay_ASSR_white_noise_lineEdit")
+
+        self.end_delay_ASSR_white_noise_lineEdit.textChanged.connect(self.end_delay_updated)
+
+        self.verticalLayoutRight2.addWidget(self.end_delay_ASSR_white_noise_lineEdit)
+
+        #self.rest_length_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise1)
+        #self.rest_length_ASSR_white_noise_lineEdit.setObjectName("rest_length_ASSR_white_noise_lineEdit")
+
+        self.rest_length_ASSR_white_noise_lineEdit.textChanged.connect(self.rest_length_updated)
+
+        self.verticalLayoutRight2.addWidget(self.rest_length_ASSR_white_noise_lineEdit)
+
+        #self.carrier_frequency_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise1)
+        #self.carrier_frequency_lineEdit.setObjectName("carrier_frequency_lineEdit")
+
+        #self.verticalLayoutRight2.addWidget(self.carrier_frequency_lineEdit)
+
+        #self.amplitude_modulation_frequency_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise1)
+        #self.amplitude_modulation_frequency_ASSR_white_noise_lineEdit.setObjectName("amplitude_modulation_frequency_ASSR_white_noise_lineEdit")
+
+        self.amplitude_modulation_frequency_ASSR_white_noise_lineEdit.textChanged.connect(self.AM_frequency_updated)
+
+        self.verticalLayoutRight2.addWidget(self.amplitude_modulation_frequency_ASSR_white_noise_lineEdit)
+
+        self.horizontalLayoutRightTop.addLayout(self.verticalLayoutRight2)
+
+        self.verticalLayoutRightASSRWhiteNoise.addLayout(self.horizontalLayoutRightTop)
+
+        #self.cue_audio_text = QtWidgets.QCheckBox(self.layoutWidgetASSRWhiteNoise1)
+        #self.cue_audio_text.setObjectName("cue_audio_text")
+        #self.cue_audio_text.setText("Cue Audio")
+
+        #self.verticalLayoutRight.addWidget(self.cue_audio_text)
+
+        self.layoutWidgetASSRWhiteNoise2 = QtWidgets.QWidget(self.frame_2)
+        self.layoutWidgetASSRWhiteNoise2.setGeometry(QtCore.QRect(50, 20, 211, 87))
+        self.layoutWidgetASSRWhiteNoise2.setObjectName("layoutWidgetASSRWhiteNoise2")
+
+
+        self.horizontalLayoutLeftASSRWhiteNoise = QtWidgets.QHBoxLayout(self.layoutWidgetASSRWhiteNoise2)
+        self.horizontalLayoutLeftASSRWhiteNoise.setContentsMargins(0, 0, 0, 0)
+        self.horizontalLayoutLeftASSRWhiteNoise.setObjectName("horizontalLayoutLeftASSRWhiteNoise")
+
+        self.verticalLayoutLeft1 = QtWidgets.QVBoxLayout()
+        self.verticalLayoutLeft1.setObjectName("verticalLayout")
+
+        self.start_delay_text = QtWidgets.QLabel(self.layoutWidgetASSRWhiteNoise2)
+        self.start_delay_text.setObjectName("start_delay_text")
+        self.start_delay_text.setText("Start Delay")
+
+
+        self.verticalLayoutLeft1.addWidget(self.start_delay_text)
+
+        self.cue_length_text = QtWidgets.QLabel(self.layoutWidgetASSRWhiteNoise2)
+        self.cue_length_text.setObjectName("cue_length_text")
+        self.cue_length_text.setText("Cue Length")
+
+
+        self.verticalLayoutLeft1.addWidget(self.cue_length_text)
+
+        self.repetitions_text = QtWidgets.QLabel(self.layoutWidgetASSRWhiteNoise2)
+        self.repetitions_text.setObjectName("repetitions_text")
+        self.repetitions_text.setText("Repetitions")
+
+
+        self.verticalLayoutLeft1.addWidget(self.repetitions_text)
+
+        self.click_frequency_text = QtWidgets.QLabel(self.layoutWidgetASSRWhiteNoise2)
         self.click_frequency_text.setObjectName("click_frequency_text")
         self.click_frequency_text.setText("Click Frequency")
 
         self.verticalLayoutLeft1.addWidget(self.click_frequency_text)
 
-        self.horizontalLayoutLeft.addLayout(self.verticalLayoutLeft1)
+        self.horizontalLayoutLeftASSRWhiteNoise.addLayout(self.verticalLayoutLeft1)
 
         self.verticalLayoutLeft2 = QtWidgets.QVBoxLayout()
         self.verticalLayoutLeft2.setObjectName("verticalLayoutLeft2")
 
-        self.start_delay_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR2)
-        self.start_delay_lineEdit.setObjectName("start_delay_lineEdit")
+        #self.start_delay_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise2)
+        #self.start_delay_ASSR_white_noise_lineEdit.setObjectName("start_delay_ASSR_white_noise_lineEdit")
 
-        self.start_delay_lineEdit.textChanged.connect(self.start_delay_updated)
+        self.start_delay_ASSR_white_noise_lineEdit.textChanged.connect(self.start_delay_updated)
 
-        self.verticalLayoutLeft2.addWidget(self.start_delay_lineEdit)
+        self.verticalLayoutLeft2.addWidget(self.start_delay_ASSR_white_noise_lineEdit)
 
-        self.cue_length_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR2)
-        self.cue_length_lineEdit.setObjectName("cue_length_lineEdit")
+        #self.cue_length_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise2)
+        #self.cue_length_ASSR_white_noise_lineEdit.setObjectName("cue_length_ASSR_white_noise_lineEdit")
 
-        #self.cue_length_lineEdit.textChanged.connect(self.cue_length_updated)
+        self.cue_length_ASSR_white_noise_lineEdit.textChanged.connect(self.cue_length_updated)
 
-        self.verticalLayoutLeft2.addWidget(self.cue_length_lineEdit)
+        self.verticalLayoutLeft2.addWidget(self.cue_length_ASSR_white_noise_lineEdit)
 
-        self.repetitions_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR2)
-        self.repetitions_lineEdit.setObjectName("repetitions_lineEdit")
+        #self.repetitions_ASSR_white_noise_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise2)
+        #self.repetitions_ASSR_white_noise_lineEdit.setObjectName("repetitions_ASSR_white_noise_lineEdit")
 
-        self.verticalLayoutLeft2.addWidget(self.repetitions_lineEdit)
+        self.repetitions_ASSR_white_noise_lineEdit.textChanged.connect(self.repetitions_updated)
 
-        self.click_frequency_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSR2)
+        self.verticalLayoutLeft2.addWidget(self.repetitions_ASSR_white_noise_lineEdit)
+
+        self.click_frequency_lineEdit = QtWidgets.QLineEdit(self.layoutWidgetASSRWhiteNoise2)
         self.click_frequency_lineEdit.setObjectName("click_frequency_lineEdit")
 
         self.verticalLayoutLeft2.addWidget(self.click_frequency_lineEdit)
 
-        self.horizontalLayoutLeft.addLayout(self.verticalLayoutLeft2)
+        self.horizontalLayoutLeftASSRWhiteNoise.addLayout(self.verticalLayoutLeft2)
 
 
+
+#Changes Bottom Frame Based on Drown Down Menu Option Selected
     def frameChange(self, i):
-        #self.start_delay_updated.start_delay = 0
-        #self.rest_length_updated.rest_length = 0
-        #self.cue_length_updated.cue_length = 0
-        #self.end_delay_updated.end_delay = 0
-
+        self.frameindex = i
         self.mainlayout.setCurrentIndex(i)
         self.mainlayout2.setCurrentIndex(i)
 
 
 
 
+    def sound(self,x,z):
+        frequency = x
+        fs = 44100  # 44100 samples per second
+        seconds = z
+
+        # Generate array with seconds*sample_rate steps, ranging between 0 and seconds
+        t = np.linspace(0, seconds, seconds * fs, False)
+
+        # Generate a 440 Hz sine wave
+        note = np.sin(frequency * t * 2 * np.pi)
+
+        # Ensure that highest value is in 16-bit range
+        audio = note * (2**15 - 1) / np.max(np.abs(note))
+
+        # Convert to 16-bit data
+        audio = audio.astype(np.int16)
+
+        # Start playback
+        play_obj = sa.play_buffer(audio, 1, 2, fs)
+
+        #Wait for playback to finish before exiting
+        play_obj.wait_done()
+
+
+
+#Count Down Timer Functions
     def showTime(self):
         if self.startCountDown:
             self.countDown -= 1
@@ -557,135 +1014,359 @@ class Ui_MainWindow(object):
             text = str(self.countDown / 10) + " s"
             self.CountdownLabel.setText(text)
 
-
-
-
     def StartCueDuration(self):
         self.startCountDown = True
         if self.countDown == 0:
             self.startCountDown = False
 
+    def setTimer(self):
+        CueDurationTimer = QTimer(self)
+        CueDurationTimer.timeout.connect(self.showTime)
+        CueDurationTimer.start(100)
+
+#Run Time Timer Functions
+    def RunTimeShowTime(self):
+        if self.startCountUp:
+            self.countUp += 1
+
+        if self.startCountUp:
+            text = str(self.countUp / 10) + " s"
+            self.CountUpLabel.setText(text)
+
+    def StartRunTimeCueDuration(self):
+        self.startCountUp = True
+
+    def setRunTimer(self):
+        CueRunTimeDurationTimer = QTimer(self)
+        CueRunTimeDurationTimer.timeout.connect(self.RunTimeShowTime)
+        CueRunTimeDurationTimer.start(100)
 
 
+#For Implementing Cues
     def CueSetup(self):
-        global timer_state
-        global start_delay
 
-        #timer_state = 0 is start delay
+        # start delay loop
+        loop = QEventLoop()
+        self.cueLayout.setCurrentIndex(1)
+        self.countDown = self.start_delay * 10
+        self.CountdownLabel.setText(str(self.start_delay))
 
-        if 0 == 0:
-            self.cueLayout.setCurrentIndex(1)
-            self.countDown = start_delay * 10
-            self.CountdownLabel.setText(str(start_delay))
-            #if self.countDown == -1:
-                #timer_state =1
-        #if timer_state == 1:
-            #self.cueLayout.setCurrentIndex(2)
-            #self.countDown = start_delay * 10
-            #self.CountdownLabel.setText(str(start_delay))
-            #if self.countDown == -1:
-                #timer_state =1
-
-        #if self.get_start_delay() >= 0:
-            #self.cueLayout.setCurrentIndex(1)
-            #self.countDown = self.get_start_delay() * 10
-            #self.CountdownLabel.setText(str(self.get_start_delay()))
-            #start total run time start and only stops when start pressed again
-
-        #if self.get_rest_length() >= 0:
-            #make sure counter from previous if statement is done
-            #so say while counter != 0
-            # time.sleep (5) --> this waits 5 seconds before trying agian-->  make sure to import time
-
-            #self.cueLayout.setCurrentIndex(2)
-            #self.countDown = self.get_rest_length() * 10
-            #self.CountdownLabel.setText(str(self.get_rest_length()))
+        self.StartCueDuration()
+        self.setTimer()
+        QTimer.singleShot(self.start_delay * 1000, loop.exit)
+        loop.exec()
 
 
-        #if cue_length_updated.end_delay >= 0:
-            #self.cueLayout.setCurrentIndex(2)
-            # start cue counter
+        if self.frameindex > 0:
+
+            for repetition in range(self.repetitions+1):
+                #rest and cues for ASSR: Clicks
+            #    if self.frameindex == 3:
+
+                    #????
 
 
-        #if end_delay_updated.end_delay >= 0:
-            #self.cueLayout.setCurrentIndex(3)
-            # startcue counter
+                #rest and cues for ASSR: AM Pure Tone
+                if self.frameindex == 4:
+                    #amplitude of carrier signal
+                    A_c = 1
+                    #amplitude of modulating signal
+                    A_m = 1
+                    #Modulated wave
+                    AM_Modulated_Wave = [A_c + A_m * np.cos(2*np.pi*self.AM_frequency*t)]*np.cos(2*np.pi*self.carrier_frequency*t)
+                    #sampling frequency
+                    f_s = 48000
+                    #repeat per repetition
+                    #for t in range(0,self.cue_length):
+                    # plays sounds of AM Modulated Wave
+                        sd.play(AM_Modulated_Wave, f_s)
+                    #wait for sound to be done playing
+                    sd.wait()
 
 
+                #rest and cues for ASSR: AM White Noise
+            #    if self.frameindex ==5:
+                    #amplitude of carrier signal
+            #        A_c = 1
+                    #amplitude of modulating signal
+            #        A_m = 1
+                    #set carrier frequency to white Noise
+                    #self.carrier_frequency =
 
-    #def cue_length_updated(self, i):
-        #self.cue_length = i
+            #        AM_Modulated_Wave = [A_c + A_m * np.cos(2*np.pi*self.AM_frequency*t)]*np.cos(2*np.pi*self.carrier_frequency*t)
+                    #sampling frequency
+            #        f_s = 48000
+                    # plays sounds of AM Modulated Wave
+            #        sd.play(AM_Modulated_Wave, f_s)
+                    #wait for sound to be done playing
+            #        sd.wait()
 
-    #def end_delay_updated(self, i):
-        #self.end_delay = i
+
+                #rest and cues for non-ASSR
+                else:
+                    # rest length loop
+                    loop2 = QEventLoop()
+                    self.cueLayout.setCurrentIndex(self.frameindex + 1)
+                    self.countDown = self.rest_length * 10
+                    self.CountdownLabel.setText(str(self.rest_length))
+
+                    self.StartCueDuration()
+                    self.setTimer()
+                    QTimer.singleShot(self.rest_length * 1000, loop2.exit)
+                    loop2.exec()
+
+                    # cue length loop
+                    loop3 = QEventLoop()
+                    self.cueLayout.setCurrentIndex(self.frameindex + 6)
+                    self.countDown = self.cue_length * 10
+                    self.CountdownLabel.setText(str(self.cue_length))
 
 
+                    self.StartCueDuration()
+                    self.setTimer()
+
+                    #A beep noise is set off at the start of every cue (when cue audio checkbox checked)
+                    if self.cue_audio_alpha_eye_text.isChecked():
+                        self.sound(600,1)
 
 
+                    QTimer.singleShot(self.cue_length * 1000, loop3.exit)
+                    loop3.exec()
 
+
+        # end delay loop
+        loop4 = QEventLoop()
+        self.cueLayout.setCurrentIndex(12)
+        self.countDown = self.end_delay * 10
+        self.CountdownLabel.setText(str(self.end_delay))
+
+        self.StartCueDuration()
+        self.setTimer()
+        QTimer.singleShot(self.end_delay * 1000, loop4.exit)
+        loop4.exec()
+
+
+        #reset All Cue Options In Bottom Frame
+        self.start_delay = 0
+        self.start_delay_free_run_lineEdit.clear()
+        self.start_delay_alpha_eye_lineEdit.clear()
+        self.start_delay_ASSR_clicks_lineEdit.clear()
+        self.start_delay_ASSR_pure_tone_lineEdit.clear()
+        self.start_delay_ASSR_white_noise_lineEdit.clear()
+
+        self.rest_length = 0
+        self.rest_length_alpha_eye_lineEdit.clear()
+        self.rest_length_ASSR_clicks_lineEdit.clear()
+        self.rest_length_ASSR_pure_tone_lineEdit.clear()
+        self.rest_length_ASSR_white_noise_lineEdit.clear()
+
+        self.cue_length = 0
+        self.cue_length_alpha_eye_lineEdit.clear()
+        self.cue_length_ASSR_clicks_lineEdit.clear()
+        self.cue_length_ASSR_pure_tone_lineEdit.clear()
+        self.cue_length_ASSR_white_noise_lineEdit.clear()
+
+        self.cue_audio_alpha_eye_text.isChecked(False)
+
+        self.repetitions = 0
+        self.repetitions_alpha_eye_lineEdit.clear()
+        self.repetitions_ASSR_clicks_lineEdit.clear()
+        self.repetitions_ASSR_pure_tone_lineEdit.clear()
+        self.repetitions_ASSR_white_noise_lineEdit.clear()
+
+        self.end_delay = 0
+        self.startCountUp = False
+        self.end_delay_alpha_eye_lineEdit.clear()
+        self.end_delay_ASSR_clicks_lineEdit.clear()
+        self.end_delay_ASSR_pure_tone_lineEdit.clear()
+        self.end_delay_ASSR_white_noise_lineEdit.clear()
+
+        self.click_frequency = 0
+        self.click_frequency_ASSR_clicks_lineEdit.clear()
+
+        self.carrier_frequency = 0
+        self.carrier_frequency_ASSR_pure_tone_lineEdit.clear()
+
+        self.AM_frequency = 0
+        self.amplitude_modulation_frequency_ASSR_pure_tone_lineEdit.clear()
+        self.amplitude_modulation_frequency_ASSR_white_noise_lineEdit.clear()
+
+
+#For Run Time Duration
+    def RunTimeDurationSetup(self):
+        self.countUp = 0
+        self.CountUpLabel.setText(str(0))
+
+        self.StartRunTimeCueDuration()
+        self.setRunTimer()
+
+
+# These functions Update Cue Input Values
     def start_delay_updated(self, str):
-        global start_delay
         if str:
-            start_delay = int(str)
+            self.start_delay = int(str)
 
-    #def rest_length_updated(self, str):
-    #    if str:
-        #    self.put_rest_length (int(str))
+    def cue_length_updated(self, str):
+        if str:
+            self.cue_length = int(str)
 
+    def rest_length_updated(self, str):
+        if str:
+            self.rest_length = (int(str))
+
+    def end_delay_updated(self, str):
+        if str:
+            self.end_delay = int(str)
+
+    def repetitions_updated(self, str):
+        if str:
+            self.repetitions = int(str)
+
+    def click_frequency_updated(self, str):
+        if str:
+            self.click_frequency = int(str)
+
+    def carrier_frequency_updated(self, str):
+        if str:
+            self.carrier_frequency = int(str)
+
+    def AM_frequency_updated(self, str):
+        if str:
+            self.AM_frequency = int(str)
+
+
+
+#Cue Labels for Top Frame
 
     def blankLabel(self):
         self.layoutWidgetBlankLabel = QtWidgets.QWidget(self.frame)
-        self.layoutWidgetBlankLabel.setGeometry(QtCore.QRect(80, 50, 341, 41)) #-->adjust dimensions as needed
+        self.layoutWidgetBlankLabel.setGeometry(QtCore.QRect(7, 40, 341, 41))
         self.layoutWidgetBlankLabel.setObjectName("layoutWidgetBlankLabel")
 
 
     def startDelayLabel(self):
         self.layoutWidgetStartDelayLabel = QtWidgets.QWidget(self.frame)
-        self.layoutWidgetStartDelayLabel.setGeometry(QtCore.QRect(80, 50, 341, 41)) #-->adjust dimensions as needed
+        self.layoutWidgetStartDelayLabel.setGeometry(QtCore.QRect(7, 40, 341, 41))
         self.layoutWidgetStartDelayLabel.setObjectName("layoutWidgetStartDelayLabel")
 
         self.start_delay_label = QtWidgets.QLabel(self.layoutWidgetStartDelayLabel)
         self.start_delay_label.setObjectName("start_delay_label")
         self.start_delay_label.setText("Wait for experiment to begin...")
 
-    def restLengthLabel(self):
-        self.layoutWidgetRestLengthLabel = QtWidgets.QWidget(self.frame)
-        self.layoutWidgetRestLengthLabel.setGeometry(QtCore.QRect(80, 50, 341, 41))
-        self.layoutWidgetRestLengthLabel.setObjectName("layoutWidgetRestLengthLabel")
 
-        self.rest_length_label = QtWidgets.QLabel(self.layoutWidgetRestLengthLabel)
-        self.rest_length_label.setObjectName("rest_length_label")
-        self.rest_length_label.setText("Eyes Open")
+    def restLengthLabelEyeBlinks(self):
+        self.layoutWidgetRestLengthLabelEyeBlinks = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetRestLengthLabelEyeBlinks.setGeometry(QtCore.QRect(7, 40, 341, 41))
+        self.layoutWidgetRestLengthLabelEyeBlinks.setObjectName("layoutWidgetRestLengthLabelEyeBlinks")
 
-    #def cueLengthLabel(self):
-        #self.layoutWidgetCueLengthLabel = QtWidgets.QWidget(self.frame)
-        #self.layoutWidgetCueLengthLabel.setGeometry(QtCore.QRect(80, 50, 341, 41)) -->adjust dimensions as needed
-        #self.layoutWidgetCueLengthLabel.setObjectName("layoutWidgetCueLengthLabel")
+        self.rest_length_label_Eye_Blinks = QtWidgets.QLabel(self.layoutWidgetRestLengthLabelEyeBlinks)
+        self.rest_length_label_Eye_Blinks.setObjectName("rest_length_label_Eye_Blinks")
+        self.rest_length_label_Eye_Blinks.setText("Rest")
 
-        #self.cue_length_label = QtWidgets.QLabel(self.layoutWidgetCueLengthLabelyLabel)
-        #self.cue_length_label.setObjectName("cue_length_label")
-        #self.cue_length_label.setText("Eyes closed")
 
-    #def endDelayLabel(self):
-        #self.layoutWidgetEndDelayLabel = QtWidgets.QWidget(self.frame)
-        #self.layoutWidgetEndDelayLabel.setGeometry(QtCore.QRect(80, 50, 341, 41)) -->adjust dimensions as needed
-        #self.layoutWidgetEndDelayLabel.setObjectName("layoutWidgetEndDelayLabel")
+    def restLengthLabelAlpha(self):
+        self.layoutWidgetRestLengthLabelAlpha = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetRestLengthLabelAlpha.setGeometry(QtCore.QRect(7, 40, 341, 41))
+        self.layoutWidgetRestLengthLabelAlpha.setObjectName("layoutWidgetRestLengthLabelAlpha")
 
-        #self.end_delay_label = QtWidgets.QLabel(self.layoutWidgetEndDelayLabel)
-        #self.end_delay_label.setObjectName("end_delay_label")
-        #self.end_delay_label.setText("Wait for experiment to end...")
+        self.rest_length_label_Alpha = QtWidgets.QLabel(self.layoutWidgetRestLengthLabelAlpha)
+        self.rest_length_label_Alpha.setObjectName("rest_length_label_Alpha")
+        self.rest_length_label_Alpha.setText("Eyes Open")
+
+    def restLengthLabelASSRClicks(self):
+        self.layoutWidgetRestLengthLabelASSRClicks = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetRestLengthLabelASSRClicks.setGeometry(QtCore.QRect(7, 40, 341, 41))
+        self.layoutWidgetRestLengthLabelASSRClicks.setObjectName("layoutWidgetRestLengthLabelASSRClicks")
+
+        self.rest_length_label_ASSR_Clicks = QtWidgets.QLabel(self.layoutWidgetRestLengthLabelASSRClicks)
+        self.rest_length_label_ASSR_Clicks.setObjectName("rest_length_label_ASSR_Clicks")
+        self.rest_length_label_ASSR_Clicks.setText("Rest")
+
+    def restLengthLabelASSRPureTone(self):
+        self.layoutWidgetRestLengthLabelASSRPureTone = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetRestLengthLabelASSRPureTone.setGeometry(QtCore.QRect(7, 40, 341, 41))
+        self.layoutWidgetRestLengthLabelASSRPureTone.setObjectName("layoutWidgetRestLengthLabelASSRPureTone")
+
+        self.rest_length_label_ASSR_Pure_Tone = QtWidgets.QLabel(self.layoutWidgetRestLengthLabelASSRPureTone)
+        self.rest_length_label_ASSR_Pure_Tone.setObjectName("rest_length_label_ASSR_Pure_Tone")
+        self.rest_length_label_ASSR_Pure_Tone.setText("Rest")
+
+    def restLengthLabelASSRWhiteNoise(self):
+        self.layoutWidgetRestLengthLabelASSRWhiteNoise = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetRestLengthLabelASSRWhiteNoise.setGeometry(QtCore.QRect(7, 40, 341, 41))
+        self.layoutWidgetRestLengthLabelASSRWhiteNoise.setObjectName("layoutWidgetRestLengthLabelASSRWhiteNoise")
+
+        self.rest_length_label_ASSR_White_Noise = QtWidgets.QLabel(self.layoutWidgetRestLengthLabelASSRWhiteNoise)
+        self.rest_length_label_ASSR_White_Noise.setObjectName("rest_length_label_ASSR_White_Noise")
+        self.rest_length_label_ASSR_White_Noise.setText("Rest")
+
+
+    def cueLengthLabelEyeBlinks(self):
+        self.layoutWidgetCueLengthLabelEyeBlinks= QtWidgets.QWidget(self.frame)
+        self.layoutWidgetCueLengthLabelEyeBlinks.setGeometry(QtCore.QRect(7, 40, 341, 41))
+        self.layoutWidgetCueLengthLabelEyeBlinks.setObjectName("layoutWidgetCueLengthLabelEyeBlinks")
+
+        self.cue_length_label_Eye_Blinks = QtWidgets.QLabel(self.layoutWidgetCueLengthLabelEyeBlinks)
+        self.cue_length_label_Eye_Blinks.setObjectName("cue_length_label_Eye_Blinks")
+        self.cue_length_label_Eye_Blinks.setText("Blink")
+
+
+    def cueLengthLabelAlpha(self):
+        self.layoutWidgetCueLengthLabelAlpha = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetCueLengthLabelAlpha.setGeometry(QtCore.QRect(7, 40, 341, 41))
+        self.layoutWidgetCueLengthLabelAlpha.setObjectName("layoutWidgetCueLengthLabelAlpha")
+
+        self.cue_length_label_Alpha = QtWidgets.QLabel(self.layoutWidgetCueLengthLabelAlpha)
+        self.cue_length_label_Alpha.setObjectName("cue_length_label_Alpha")
+        self.cue_length_label_Alpha.setText("Eyes Closed")
+
+    def cueLengthLabelASSRClicks(self):
+        self.layoutWidgetCueLengthLabelASSRClicks = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetCueLengthLabelASSRClicks.setGeometry(QtCore.QRect(7, 40, 341, 41))
+        self.layoutWidgetCueLengthLabelASSRClicks.setObjectName("layoutWidgetCueLengthLabelASSRClicks")
+
+        self.cue_length_label_ASSR_Clicks = QtWidgets.QLabel(self.layoutWidgetCueLengthLabelASSRClicks)
+        self.cue_length_label_ASSR_Clicks.setObjectName("cue_length_label_ASSR_Clicks")
+        self.cue_length_label_ASSR_Clicks.setText("Clicking Playing")
+
+    def cueLengthLabelASSRPureTone(self):
+        self.layoutWidgetCueLengthLabelASSRPureTone = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetCueLengthLabelASSRPureTone.setGeometry(QtCore.QRect(7, 40, 341, 41))
+        self.layoutWidgetCueLengthLabelASSRPureTone.setObjectName("layoutWidgetCueLengthLabelASSRPureTone")
+
+        self.cue_length_label_ASSR_Pure_Tone = QtWidgets.QLabel(self.layoutWidgetCueLengthLabelASSRPureTone)
+        self.cue_length_label_ASSR_Pure_Tone.setObjectName("cue_length_label_ASSR_Pure_Tone")
+        self.cue_length_label_ASSR_Pure_Tone.setText("Clicking Playing")
+
+    def cueLengthLabelASSRWhiteNoise(self):
+        self.layoutWidgetCueLengthLabelASSRWhiteNoise = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetCueLengthLabelASSRWhiteNoise.setGeometry(QtCore.QRect(7, 40, 341, 41))
+        self.layoutWidgetCueLengthLabelASSRWhiteNoise.setObjectName("layoutWidgetCueLengthLabelASSRWhiteNoise")
+
+        self.cue_length_label_ASSR_White_Noise = QtWidgets.QLabel(self.layoutWidgetCueLengthLabelASSRWhiteNoise)
+        self.cue_length_label_ASSR_White_Noise.setObjectName("cue_length_label_ASSR_White_Noise")
+        self.cue_length_label_ASSR_White_Noise.setText("Clicking Playing")
+
+
+    def endDelayLabel(self):
+        self.layoutWidgetEndDelayLabel = QtWidgets.QWidget(self.frame)
+        self.layoutWidgetEndDelayLabel.setGeometry(QtCore.QRect(7, 40, 341, 41))
+        self.layoutWidgetEndDelayLabel.setObjectName("layoutWidgetEndDelayLabel")
+
+        self.end_delay_label = QtWidgets.QLabel(self.layoutWidgetEndDelayLabel)
+        self.end_delay_label.setObjectName("end_delay_label")
+        self.end_delay_label.setText("Wait for experiment to end...")
 
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
         self.start_button.setText(_translate("MainWindow", "Start"))
-        #self.label_7.setText(_translate("MainWindow", "Prompt"))
-        self.label_9.setText(_translate("MainWindow", "Total Run Time"))
-        self.label_10.setText(_translate("MainWindow", "TextLabel"))
-        #self.label_8.setText(_translate("MainWindow", "Cue Countdown"))
-        #self.label_11.setText(_translate("MainWindow", "TextLabel"))
+        self.RunTimeLabel.setText(_translate("MainWindow", "Total Run Time:"))
+        self.CueDurationLabel.setText(_translate("MainWindow", "Cue Duration:"))
         self.drop_down_menu.setItemText(0, _translate("MainWindow", "Free Run"))
         self.drop_down_menu.setItemText(1, _translate("MainWindow", "Eye Blinks"))
         self.drop_down_menu.setItemText(2, _translate("MainWindow", "Alpha"))
-        self.drop_down_menu.setItemText(3, _translate("MainWindow", "ASSR"))
+        self.drop_down_menu.setItemText(3, _translate("MainWindow", "ASSR: Clicks"))
+        self.drop_down_menu.setItemText(4, _translate("MainWindow", "ASSR: AM Pure Tone"))
+        self.drop_down_menu.setItemText(5, _translate("MainWindow", "ASSR: AM White Noise"))
