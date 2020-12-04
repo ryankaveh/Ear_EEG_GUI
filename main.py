@@ -489,7 +489,7 @@ class SerialReader(QWidget):
                     self.channelDataArr[idx].packetId = packetId
                 idx += 1
             
-            print("ID: " + str(packetId))
+            # print("ID: " + str(packetId))
 
 class ChannelData(Structure):
     _fields_ = [("packetId", c_ubyte), ("chxEEG", c_uint), ("chxI", c_ushort), ("chxQ", c_ushort), ("chxEDO", c_ubyte)]

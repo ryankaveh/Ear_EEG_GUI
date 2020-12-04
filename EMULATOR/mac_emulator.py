@@ -140,7 +140,7 @@ def earEEG_process(messageQueue, responseQueue):
             # generate & write data to COM Port
             out = earEEG_genDummyData()
             earEEG.write(out)
-            print("ID: " + str(packet_id))
+            # print("ID: " + str(packet_id))
             line = earEEG.read()
             if line:
                 print("Response: " + line)
