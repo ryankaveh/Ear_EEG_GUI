@@ -1,12 +1,6 @@
-import os, subprocess, serial, time
-import threading
+import os, subprocess, serial, struct, time, threading
+import numpy as np
 from multiprocessing import Process, Queue
-
-
-#
-#
-data_counter = 0
-packet_id = 0
 
 # This currently works! We can change the names of the emulated ports but it doesn't really matter.
 # It's currently set up to be independant of anything else. You just need to run this python script
@@ -27,6 +21,9 @@ packet_id = 0
 # and you can send stuff through the serial port with (not you need to send it through the opposite end):
 #   echo "test" > ./ttydevice
 
+data_counter = 0
+packet_id = 0
+
 class serial_emulator(object):
     def __init__(self, device_port='./ttyChip', client_port='./ttyGUI'):
         self.device_port = device_port
@@ -36,10 +33,13 @@ class serial_emulator(object):
         self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         time.sleep(1)
         self.serialChipSide = serial.Serial(self.device_port, 9600, rtscts=True, dsrdtr=True)
+        self.serialGUISide = serial.Serial(self.client_port, 9600, rtscts=True, dsrdtr=True)
         self.err = ''
         self.out = ''
 
     def write(self, out):
+        if self.serialGUISide.in_waiting > 512: # This is needed as the program freezes if the input buffer is full, 512 is half of its size
+            self.serialGUISide.reset_input_buffer()
         self.serialChipSide.write(out)
 
     def read(self):
@@ -55,7 +55,6 @@ class serial_emulator(object):
         self.proc.kill()
         self.out, self.err = self.proc.communicate()
 
-
 def earEEG_genDummyData():
     global data_counter
     global packet_id
@@ -69,33 +68,32 @@ def earEEG_genDummyData():
     #               eeg_data_channel_4,eeg_data_channel_3,eeg_data_channel_2,
     #               eeg_data_channel_1,eeg_data_channel_0};
 
-    chx_EEG = (data_counter + 1).to_bytes(3,'big')
-    chx_EDO = (data_counter + 2).to_bytes(1,'big')
-    chx_i   = (data_counter + 3).to_bytes(2,'big')
-    chx_q   = (data_counter + 3).to_bytes(2,'big')
-
     pkt_id = (packet_id).to_bytes(1,'big')
 
+    chx_EEG = (data_counter + 1).to_bytes(3,'big')
+    chx_i   = (data_counter + 3).to_bytes(2,'big')
+    chx_q   = (data_counter + 3).to_bytes(2,'big')
+    chx_EDO = (data_counter + 2).to_bytes(1,'big')
 
     chx = chx_EEG + chx_i + chx_q + chx_EDO
+    allChx = b''
 
     for i in range(0,7):
-        chx += chx
-    
-    packet = pkt_id + chx
+        allChx += chx
+
+    packet = pkt_id + allChx
 
     if (packet_id < 254):
         packet_id = packet_id + 1
     else:
         packet_id = 0
 
-    if (data_counter < 253):
+    if (data_counter < 252):
         data_counter = data_counter + 2
     else:
         data_counter = 0
 
-    # print(newData)
-    return (packet)
+    return(packet)
 
 def earEEG_process(messageQueue, responseQueue):
 
@@ -108,12 +106,10 @@ def earEEG_process(messageQueue, responseQueue):
 
     # set various flag & starting datapoint
     start_flag = 0
-    lastData = 0
 
     while True:
         # time delay (1 mS)
-        time.sleep(.001)
-        #time.sleep(2) 
+        time.sleep(.1)
         
         # Use this if statement to start and stop
         # the dummy data generation from the terminal you used to
@@ -142,13 +138,13 @@ def earEEG_process(messageQueue, responseQueue):
 
         if (start_flag == 1):
             # generate & write data to COM Port
-            data = earEEG_genDummyData()
-            lastData = data
-            earEEG.write(data)
+            out = earEEG_genDummyData()
+            earEEG.write(out)
+            print("ID: " + str(packet_id))
             line = earEEG.read()
+            if line:
+                print("Response: " + line)
             responseQueue.put(line)
-
-
     
     print("earEEG_process finished")
 

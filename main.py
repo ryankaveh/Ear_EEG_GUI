@@ -1,12 +1,12 @@
-import os
-import sys
+import os, sys, serial, struct
 import numpy as np
 import multiprocessing as mp
 from time import sleep
 from random import randint
+from ctypes import Structure, c_ubyte, c_ushort, c_uint
 from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton
 from PyQt5.QtGui import QPalette, QColor
-from PyQt5.QtCore import Qt, QTimer, QProcess
+from PyQt5.QtCore import Qt, QTimer, QProcess, QObject
 from pyqtgraph import PlotWidget, plot, mkPen
 
 class MainWindow(QMainWindow):
@@ -17,7 +17,8 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Ear EEG GUI")
 
-        numPlots = 16 # Number of graphs to create, will probally end at 32
+        numPlots = 4 # Number of graphs to create, will probally end at 32
+        numChannels = 7 # Number of channels to expect, will definitely break if value is incorrect
 
         possPlotData = []
 
@@ -25,9 +26,18 @@ class MainWindow(QMainWindow):
 
         running = mp.Value('i', False) # Univerally controls whether the DataProcesses run and CustomGraphWidgets redraw themselves
 
+        channelDataArr = []
+        for i in range(0,numChannels):
+            lock = mp.RLock()
+            channelDataArr.append(mp.Value(ChannelData, 0, 0, 0, 0, lock=lock))
+
+        port = "./ttyGUI"
+        serialReader = SerialReader(port, channelDataArr)
+        serialReader.startSerialReader()
+
         # Currently creates 'numPlots' identical test graphs, eventually each graph will be created individually
         for i in range(numPlots): 
-            dataProcess = SampleDataProcess(running)
+            dataProcess = SampleDataProcess(running, channelDataArr[i%numChannels])
             p = mp.Process(target=dataProcess.startUpdateData)
             p.daemon = True
             p.start()
@@ -36,7 +46,7 @@ class MainWindow(QMainWindow):
             # First item in the tuple is supposed to be the name of the graph, is currently just its color
             possPlotData.append((colors[i % len(colors)], dataProcess))
 
-        layout = CustomGridLayout(running, possPlotData)
+        layout = CustomGridLayout(running, possPlotData, serialReader)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
@@ -45,7 +55,7 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, running, possPlotData):
+    def __init__(self, running, possPlotData, serialReader):
 
         self.parent = super()
         self.parent.__init__()
@@ -104,6 +114,7 @@ class CustomGridLayout(QGridLayout):
         self.parent.addWidget(StartStop(running), 1, 0)
         self.parent.addWidget(columnDropdowns0, 1, 2)
         self.parent.addWidget(columnDropdowns1, 1, 3)
+        self.parent.addWidget(serialReader, 1, 4)
 
         current.append([possPlotData[0], possPlotData[1]]) # 
         current.append([possPlotData[2], possPlotData[3]])
@@ -389,16 +400,19 @@ class DataProcess():
 # Data process for a simple sine wave
 class SampleDataProcess(DataProcess):
     
-    def __init__(self, running):
+    def __init__(self, running, channelData):
 
         self.running = running
+        self.channelData = channelData
+        self.currPacket = -1
+        self.counter = 0 # Just used to confirm graphing correctness, should be removed right after
 
-        npX = np.arange(0, 1, 0.01)
-        npY = np.sin(4 * np.pi * npX)
-
+        # These lists are used to keep track of the true value as the lock can sometimes prevent a write
+        self.trueX = list(np.arange(-100, 0, 1))
+        self.trueY = [0] * 100
         # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
-        self.x = mp.Array('d', list(npX))
-        self.y = mp.Array('d', list(npY))        
+        self.x = mp.Array('d', list(np.arange(-100, 0, 1)))
+        self.y = mp.Array('d', [0] * 100)        
 
     def startUpdateData(self):
 
@@ -406,40 +420,86 @@ class SampleDataProcess(DataProcess):
             if bool(self.running.value):
                 self.updateData()
 
-            # This sleep will likely not normally be needed (unless we want to cap refresh speed) 
-            # Needed here as the sine wave progresses a fixed amount every update
-            # This is very different than it will be for real data where progression is based on the calculation run on actual live data coming in
-            sleep(0.05)
+            # This sleep is just to cap the refresh rate to lower the load on the computer, really no need to go full speed
+            sleep(.01)
 
     def updateData(self):
-        for idx, val in enumerate(self.x):
-            self.x[idx] = val + 0.01
+        newX = self.counter + 1
+        with self.channelData.get_lock():
+            packetId = self.channelData.packetId
+            newY = self.channelData.chxEEG
 
-        # Old method of progressing sine wave, didn't work on the multiprocess safe arrays
-        # self.x.append(self.x[-1] + 0.01)
-        # self.x = self.x[1:]
-
-        tmp = self.y[0]
-        for idx in range(len(self.y) - 1):
-            self.y[idx] = self.y[idx + 1]
-        self.y[-1] = tmp
-
-        # Old method of progressing sine wave, didn't work on the multiprocess safe arrays
-        # self.y.append(self.y[0])
-        # self.y = self.y[1:]
+        if self.currPacket != packetId:
+            self.trueX = self.trueX[1:] + [newX]
+            self.trueY = self.trueY[1:] + [newY]
+            for i in range(len(self.x)):
+                self.x[i] = self.trueX[i]
+                self.y[i] = self.trueY[i]
+            self.currPacket = packetId
+            self.counter = newX 
 
     def getData(self):
         # [:] needed to extract array from multiprocessing.Array
         return self.x[:], self.y[:]
 
+class SerialReader(QWidget):
+
+    def __init__(self, port, channelDataArr):
+
+        super().__init__()
+        self.serialGUISide = None
+        while not self.serialGUISide: # This waits for the client (currently the emulator) to create the port
+            try:
+                self.serialGUISide = serial.Serial(port, 9600, rtscts=True, dsrdtr=True)
+            except:
+                pass
+        self.channelDataArr = channelDataArr
+
+        self.refreshRate = 5
+
+        self.hide()
+
+    def startSerialReader(self):
+
+        self.timer = QTimer()
+        self.timer.setInterval(self.refreshRate)
+        self.timer.timeout.connect(self.updateData)
+        self.timer.start()
+
+    def updateData(self):
+        if self.serialGUISide.in_waiting > 0:
+            val = b''
+            for i in range(57):
+                val += self.serialGUISide.read()
+
+            packetId = int.from_bytes(val[:1], 'big')
+            
+            idx = 0
+            for i in range(1, len(val) - 1, 8): # If the number of channels is not 7 this will fail to due to channelDataArr being the wrong size
+                chxEEG = int.from_bytes(val[i:i+3], 'big')
+                chxI = int.from_bytes(val[i+3:i+5], 'big')
+                chxQ = int.from_bytes(val[i+5:i+7], 'big')
+                chxEDO = int.from_bytes(val[i+7:i+8], 'big')
+
+                with self.channelDataArr[idx].get_lock():
+                    self.channelDataArr[idx].chxEEG = chxEEG
+                    self.channelDataArr[idx].chxI = chxI
+                    self.channelDataArr[idx].chxQ = chxQ
+                    self.channelDataArr[idx].chxEDO = chxEDO
+                    self.channelDataArr[idx].packetId = packetId
+                idx += 1
+            
+            print("ID: " + str(packetId))
+
+class ChannelData(Structure):
+    _fields_ = [("packetId", c_ubyte), ("chxEEG", c_uint), ("chxI", c_ushort), ("chxQ", c_ushort), ("chxEDO", c_ubyte)]
 
 def main():
-
     app = QApplication(sys.argv)
     main = MainWindow()
     main.show()
     sys.exit(app.exec_())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
