@@ -68,17 +68,17 @@ def earEEG_genDummyData():
     #               eeg_data_channel_4,eeg_data_channel_3,eeg_data_channel_2,
     #               eeg_data_channel_1,eeg_data_channel_0};
 
-    pkt_id = (packet_id).to_bytes(1,'big')
+    pkt_id = (packet_id).to_bytes(1, 'big')
 
-    chx_EEG = (data_counter + 1).to_bytes(3,'big')
-    chx_i   = (data_counter + 3).to_bytes(2,'big')
-    chx_q   = (data_counter + 3).to_bytes(2,'big')
-    chx_EDO = (data_counter + 2).to_bytes(1,'big')
+    chx_EEG = (data_counter + 1).to_bytes(3, 'big', signed=True)
+    chx_i   = (data_counter + 3).to_bytes(2, 'big', signed=True)
+    chx_q   = (data_counter + 3).to_bytes(2, 'big', signed=True)
+    chx_EDO = (data_counter + 2).to_bytes(1, 'big', signed=True)
 
     chx = chx_EEG + chx_i + chx_q + chx_EDO
     allChx = b''
 
-    for i in range(0,7):
+    for i in range(0,8):
         allChx += chx
 
     packet = pkt_id + allChx
@@ -88,7 +88,7 @@ def earEEG_genDummyData():
     else:
         packet_id = 0
 
-    if (data_counter < 252):
+    if (data_counter < 124):
         data_counter = data_counter + 2
     else:
         data_counter = 0

@@ -1,9 +1,9 @@
-import os, sys, serial, struct
+import os, sys, serial, struct, math
 import numpy as np
 import multiprocessing as mp
 from time import sleep
 from random import randint
-from ctypes import Structure, c_ubyte, c_ushort, c_uint
+from ctypes import Structure, c_byte, c_short, c_int
 from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import Qt, QTimer, QProcess, QObject
@@ -17,17 +17,18 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Ear EEG GUI")
 
-        numPlots = 4 # Number of graphs to create, will probally end at 32
-        numChannels = 7 # Number of channels to expect, will definitely break if value is incorrect
+        numChannels = 8 # Number of channels to expect, will definitely break if value is incorrect
 
+        # List of all DataProcesses that can become graphs (and then be shown) during runtime
+        # First item in the tuple is supposed to be the name of the graph, is currently just its color
         possPlotData = []
 
-        colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w'] # Background colors of the graphs, currently used as otherwise all graphs would look identical
+        # colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w'] # Background colors of the graphs, currently used as otherwise all graphs would look identical
 
         running = mp.Value('i', False) # Univerally controls whether the DataProcesses run and CustomGraphWidgets redraw themselves
 
         channelDataArr = []
-        for i in range(0,numChannels):
+        for i in range(0, numChannels):
             lock = mp.RLock()
             channelDataArr.append(mp.Value(ChannelData, 0, 0, 0, 0, lock=lock))
 
@@ -36,15 +37,27 @@ class MainWindow(QMainWindow):
         serialReader.startSerialReader()
 
         # Currently creates 'numPlots' identical test graphs, eventually each graph will be created individually
-        for i in range(numPlots): 
-            dataProcess = SampleDataProcess(running, channelDataArr[i%numChannels])
-            p = mp.Process(target=dataProcess.startUpdateData)
+        for i in range(numChannels): 
+            eegPlusEDODataProcess = EEGPlusEDODataProcess(running, channelDataArr[i % numChannels])
+            p = mp.Process(target=eegPlusEDODataProcess.startUpdateData)
             p.daemon = True
             p.start()
 
-            # List of all DataProcesses that can become graphs (and then be shown) during runtime
-            # First item in the tuple is supposed to be the name of the graph, is currently just its color
-            possPlotData.append((colors[i % len(colors)], dataProcess))
+            possPlotData.append(("Ch " + str(i) + " EEG + EDO", eegPlusEDODataProcess))
+
+            iQMagDataProcess = IQMagDataProcess(running, channelDataArr[i % numChannels])
+            p = mp.Process(target=iQMagDataProcess.startUpdateData)
+            p.daemon = True
+            p.start()
+
+            possPlotData.append(("Ch " + str(i) + " mag(I&Q)", iQMagDataProcess))
+
+            iQPhaseDataProcess = IQPhaseDataProcess(running, channelDataArr[i % numChannels])
+            p = mp.Process(target=iQPhaseDataProcess.startUpdateData)
+            p.daemon = True
+            p.start()
+
+            possPlotData.append(("Ch " + str(i) + " phase(I&Q)", iQPhaseDataProcess))
 
         layout = CustomGridLayout(running, possPlotData, serialReader)
 
@@ -350,11 +363,11 @@ class PlotColumn(QWidget):
 # Graphs data given and updated by dataProcess
 class CustomPlotWidget(PlotWidget):
 
-    def __init__(self, running, dataProcess, color):
+    def __init__(self, running, dataProcess, name):
 
         super().__init__()
         self.running = running
-        self.setBackground(color) # Used to distinguish identical plots
+        self.setBackground('w')
         self.dataProcess = dataProcess
 
         self.refreshRate = 25 # How fast to redraw graph in milliseconds, currently not a parameter as will probably be same for every graph
@@ -386,7 +399,13 @@ class DataProcess():
 
     # Starts a loop to call the updateData function 
     def startUpdateData(self):
-        raise Exception("Child class must implement this method")
+        
+        while True:
+            if bool(self.running.value):
+                self.updateData()
+
+            # This sleep is just to cap the refresh rate to lower the load on the computer, really no need to go full speed
+            sleep(.01)
 
     # Recalculates the graphical data to return based on the raw input
     def updateData(self):
@@ -395,17 +414,18 @@ class DataProcess():
     # Returns the data neeeded to redraw the graph
     # This method will likely be the same for all children but isn't defined here so all variables remain in the child class
     def getData(self):
-        raise Exception("Child class must implement this method")
+        # [:] needed to extract array from multiprocessing.Array
+        return self.x[:], self.y[:]
 
 # Data process for a simple sine wave
-class SampleDataProcess(DataProcess):
+class EEGPlusEDODataProcess(DataProcess):
     
     def __init__(self, running, channelData):
 
         self.running = running
         self.channelData = channelData
         self.currPacket = -1
-        self.counter = 0 # Just used to confirm graphing correctness, should be removed right after
+        self.counter = 0 # Is there a better way to repsent the x axis?
 
         # These lists are used to keep track of the true value as the lock can sometimes prevent a write
         self.trueX = list(np.arange(-100, 0, 1))
@@ -414,20 +434,11 @@ class SampleDataProcess(DataProcess):
         self.x = mp.Array('d', list(np.arange(-100, 0, 1)))
         self.y = mp.Array('d', [0] * 100)        
 
-    def startUpdateData(self):
-
-        while True:
-            if bool(self.running.value):
-                self.updateData()
-
-            # This sleep is just to cap the refresh rate to lower the load on the computer, really no need to go full speed
-            sleep(.01)
-
     def updateData(self):
         newX = self.counter + 1
         with self.channelData.get_lock():
             packetId = self.channelData.packetId
-            newY = self.channelData.chxEEG
+            newY = self.channelData.chxEEG + self.channelData.chxEDO
 
         if self.currPacket != packetId:
             self.trueX = self.trueX[1:] + [newX]
@@ -438,9 +449,102 @@ class SampleDataProcess(DataProcess):
             self.currPacket = packetId
             self.counter = newX 
 
-    def getData(self):
-        # [:] needed to extract array from multiprocessing.Array
-        return self.x[:], self.y[:]
+# Data process for a simple sine wave
+class IQMagDataProcess(DataProcess):
+    
+    def __init__(self, running, channelData):
+
+        self.running = running
+        self.channelData = channelData
+        self.currPacket = -1
+        self.counter = 0
+
+        # These lists are used to keep track of the true value as the lock can sometimes prevent a write
+        self.trueX = list(np.arange(-100, 0, 1))
+        self.trueY = [0] * 100
+        # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
+        self.x = mp.Array('d', list(np.arange(-100, 0, 1)))
+        self.y = mp.Array('d', [0] * 100)        
+
+    def updateData(self):
+        newX = self.counter + 1
+        with self.channelData.get_lock():
+            packetId = self.channelData.packetId
+            newY = math.sqrt(self.channelData.chxI^2 + self.channelData.chxQ^2)
+
+        if self.currPacket != packetId:
+            self.trueX = self.trueX[1:] + [newX]
+            self.trueY = self.trueY[1:] + [newY]
+            for i in range(len(self.x)):
+                self.x[i] = self.trueX[i]
+                self.y[i] = self.trueY[i]
+            self.currPacket = packetId
+            self.counter = newX 
+    
+# Data process for a simple sine wave
+class IQPhaseDataProcess(DataProcess):
+    
+    def __init__(self, running, channelData):
+
+        self.running = running
+        self.channelData = channelData
+        self.currPacket = -1
+        self.counter = 0
+
+        # These lists are used to keep track of the true value as the lock can sometimes prevent a write
+        self.trueX = list(np.arange(-100, 0, 1))
+        self.trueY = [0] * 100
+        # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
+        self.x = mp.Array('d', list(np.arange(-100, 0, 1)))
+        self.y = mp.Array('d', [0] * 100)        
+
+    def updateData(self):
+        newX = self.counter + 1
+        with self.channelData.get_lock():
+            packetId = self.channelData.packetId
+            print(self.channelData.chxQ / self.channelData.chxI)
+            newY = math.atan(self.channelData.chxQ / self.channelData.chxI)
+
+        if self.currPacket != packetId:
+            self.trueX = self.trueX[1:] + [newX]
+            self.trueY = self.trueY[1:] + [newY]
+            for i in range(len(self.x)):
+                self.x[i] = self.trueX[i]
+                self.y[i] = self.trueY[i]
+            self.currPacket = packetId
+            self.counter = newX 
+
+# # Data process for a simple sine wave
+# class SampleDataProcess(DataProcess):
+    
+#     def __init__(self, running, channelData):
+
+#         self.running = running
+#         self.channelData = channelData
+#         self.currPacket = -1
+#         self.counter = 0 # Just used to confirm graphing correctness, should be removed right after
+
+#         # These lists are used to keep track of the true value as the lock can sometimes prevent a write
+#         self.trueX = list(np.arange(-100, 0, 1))
+#         self.trueY = [0] * 100
+#         # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
+#         self.x = mp.Array('d', list(np.arange(-100, 0, 1)))
+#         self.y = mp.Array('d', [0] * 100)        
+
+#     def updateData(self):
+#         newX = self.counter + 1
+#         with self.channelData.get_lock():
+#             packetId = self.channelData.packetId
+#             newY = self.channelData.chxEEG
+
+#         if self.currPacket != packetId:
+#             self.trueX = self.trueX[1:] + [newX]
+#             self.trueY = self.trueY[1:] + [newY]
+#             for i in range(len(self.x)):
+#                 self.x[i] = self.trueX[i]
+#                 self.y[i] = self.trueY[i]
+#             self.currPacket = packetId
+#             self.counter = newX 
 
 class SerialReader(QWidget):
 
@@ -469,17 +573,17 @@ class SerialReader(QWidget):
     def updateData(self):
         if self.serialGUISide.in_waiting > 0:
             val = b''
-            for i in range(57):
+            for i in range(65):
                 val += self.serialGUISide.read()
 
             packetId = int.from_bytes(val[:1], 'big')
             
             idx = 0
-            for i in range(1, len(val) - 1, 8): # If the number of channels is not 7 this will fail to due to channelDataArr being the wrong size
-                chxEEG = int.from_bytes(val[i:i+3], 'big')
-                chxI = int.from_bytes(val[i+3:i+5], 'big')
-                chxQ = int.from_bytes(val[i+5:i+7], 'big')
-                chxEDO = int.from_bytes(val[i+7:i+8], 'big')
+            for i in range(1, len(val) - 1, 8): # If the number of channels is not 8 this will fail to due to channelDataArr being the wrong size
+                chxEEG = int.from_bytes(val[i:i+3], 'big', signed=True)
+                chxI = int.from_bytes(val[i+3:i+5], 'big', signed=True)
+                chxQ = int.from_bytes(val[i+5:i+7], 'big', signed=True)
+                chxEDO = int.from_bytes(val[i+7:i+8], 'big', signed=True)
 
                 with self.channelDataArr[idx].get_lock():
                     self.channelDataArr[idx].chxEEG = chxEEG
@@ -492,7 +596,11 @@ class SerialReader(QWidget):
             # print("ID: " + str(packetId))
 
 class ChannelData(Structure):
-    _fields_ = [("packetId", c_ubyte), ("chxEEG", c_uint), ("chxI", c_ushort), ("chxQ", c_ushort), ("chxEDO", c_ubyte)]
+    _fields_ = [("packetId", c_byte), ("chxEEG", c_int), ("chxI", c_short), ("chxQ", c_short), ("chxEDO", c_byte)]
+    # Plotting options: EEG+EDO, Mag(I&Q), Phase(I&Q)
+    # Mag = sqrt(I^2 + Q^2)
+    # I = real, Q = imaginary
+    # Arctan(Q/I)
 
 def main():
     app = QApplication(sys.argv)
