@@ -1,2 +1,5 @@
 # Untracked files:
 .DS_Store
+ttyChip
+ttyGUI
+data/

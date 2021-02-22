@@ -1,10 +1,12 @@
 import os, sys, serial, struct, math
 import numpy as np
 import multiprocessing as mp
-from time import sleep
+from time import sleep, time
+from queue import Queue
+from csv import writer
 from random import randint
 from ctypes import Structure, c_byte, c_short, c_int
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton
+from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton, QCheckBox, QLineEdit
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import Qt, QTimer, QProcess, QObject
 from pyqtgraph import PlotWidget, plot, mkPen
@@ -27,13 +29,17 @@ class MainWindow(QMainWindow):
 
         running = mp.Value('i', False) # Univerally controls whether the DataProcesses run and CustomGraphWidgets redraw themselves
 
+        # Creates SerialReader object to read data from serial port "port", populate channelDataArr and save the data to saveDataQueue
+        port = "./ttyGUI"
+
         channelDataArr = []
         for i in range(0, numChannels):
             lock = mp.RLock()
             channelDataArr.append(mp.Value(ChannelData, 0, 0, 0, 0, lock=lock))
 
-        port = "./ttyGUI"
-        serialReader = SerialReader(port, channelDataArr)
+        saveDataQueue = Queue()
+
+        serialReader = SerialReader(port, channelDataArr, saveDataQueue)
         serialReader.startSerialReader()
 
         # Currently creates 'numPlots' identical test graphs, eventually each graph will be created individually
@@ -59,7 +65,7 @@ class MainWindow(QMainWindow):
 
             possPlotData.append(("Ch " + str(i) + " phase(I&Q)", iQPhaseDataProcess))
 
-        layout = CustomGridLayout(running, possPlotData, serialReader)
+        layout = CustomGridLayout(running, possPlotData, serialReader, saveDataQueue)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
@@ -68,7 +74,7 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, running, possPlotData, serialReader):
+    def __init__(self, running, possPlotData, serialReader, saveDataQueue):
 
         self.parent = super()
         self.parent.__init__()
@@ -122,24 +128,33 @@ class CustomGridLayout(QGridLayout):
         combindedPlotColumnLayout.addWidget(plotColumn0)
         combindedPlotColumnLayout.addWidget(plotColumn1)
 
-        # Adds plots and dropdown menus in a grid format, will have to add other buttons to row 1 later (start/stop, etc.)
-        self.parent.addLayout(combindedPlotColumnLayout, 0, 0, 1, 4)
-        self.parent.addWidget(StartStop(running), 1, 0)
-        self.parent.addWidget(columnDropdowns0, 1, 2)
-        self.parent.addWidget(columnDropdowns1, 1, 3)
-        self.parent.addWidget(serialReader, 1, 4)
+        saveDataMenuButton = SaveDataMenuButton(running)
 
-        current.append([possPlotData[0], possPlotData[1]]) # 
+        saveDataWriter = SaveDataWriter(running, saveDataQueue, saveDataMenuButton)
+        saveDataWriter.startSaveDataWriter()
+
+        # Adds plots and dropdown menus in a grid format, will have to add other buttons to row 1 later (start/stop, etc.)
+        self.parent.addLayout(combindedPlotColumnLayout, 0, 0, 1, 5)
+        self.parent.addWidget(saveDataMenuButton, 1, 0)
+        self.parent.addWidget(StartStop(running, saveDataMenuButton), 1, 1)
+        self.parent.addWidget(columnDropdowns0, 1, 3)
+        self.parent.addWidget(columnDropdowns1, 1, 4)
+
+        self.parent.addWidget(serialReader, 1, 5) # The SerialReader and SaveDataWriter both hide themselves, are only attached to be in the event loop
+        self.parent.addWidget(saveDataWriter, 1, 6)
+
+        current.append([possPlotData[0], possPlotData[1]])
         current.append([possPlotData[2], possPlotData[3]])
         current.append([columnDropdowns0, columnDropdowns1]) # Last item in current is list of ColumnDropdowns so they can reference each other
         
 class StartStop(QWidget):
 
-    def __init__(self, running):
+    def __init__(self, running, saveDataMenuButton):
 
         super().__init__()
 
         self.running = running
+        self.saveDataMenuButton = saveDataMenuButton
         self.layout = QHBoxLayout()
 
         startButton = QPushButton("Start")
@@ -155,9 +170,11 @@ class StartStop(QWidget):
     
     def start(self):
         self.running.value = True
+        self.saveDataMenuButton.setChangeable(False)
 
     def stop(self):
         self.running.value = False
+        self.saveDataMenuButton.setChangeable(True)
 
     
 
@@ -435,7 +452,7 @@ class EEGPlusEDODataProcess(DataProcess):
         self.y = mp.Array('d', [0] * 100)        
 
     def updateData(self):
-        newX = self.counter + 1
+        newX = self.counter + 1 # TODO: This should prob be updated to use the difference between the current and next packet ID
         with self.channelData.get_lock():
             packetId = self.channelData.packetId
             newY = self.channelData.chxEEG + self.channelData.chxEDO
@@ -502,7 +519,6 @@ class IQPhaseDataProcess(DataProcess):
         newX = self.counter + 1
         with self.channelData.get_lock():
             packetId = self.channelData.packetId
-            print(self.channelData.chxQ / self.channelData.chxI)
             newY = math.atan(self.channelData.chxQ / self.channelData.chxI)
 
         if self.currPacket != packetId:
@@ -548,7 +564,7 @@ class IQPhaseDataProcess(DataProcess):
 
 class SerialReader(QWidget):
 
-    def __init__(self, port, channelDataArr):
+    def __init__(self, port, channelDataArr, saveDataQueue):
 
         super().__init__()
         self.serialGUISide = None
@@ -558,6 +574,7 @@ class SerialReader(QWidget):
             except:
                 pass
         self.channelDataArr = channelDataArr
+        self.saveDataQueue = saveDataQueue
 
         self.refreshRate = 5
 
@@ -578,6 +595,8 @@ class SerialReader(QWidget):
 
             packetId = int.from_bytes(val[:1], 'big')
             
+            saveData = [packetId]
+
             idx = 0
             for i in range(1, len(val) - 1, 8): # If the number of channels is not 8 this will fail to due to channelDataArr being the wrong size
                 chxEEG = int.from_bytes(val[i:i+3], 'big', signed=True)
@@ -592,15 +611,134 @@ class SerialReader(QWidget):
                     self.channelDataArr[idx].chxEDO = chxEDO
                     self.channelDataArr[idx].packetId = packetId
                 idx += 1
-            
-            # print("ID: " + str(packetId))
+
+                saveData.extend((chxEEG, chxI, chxQ, chxEDO))
+
+            self.saveDataQueue.put(saveData) # We might want this to be put_nowait
 
 class ChannelData(Structure):
     _fields_ = [("packetId", c_byte), ("chxEEG", c_int), ("chxI", c_short), ("chxQ", c_short), ("chxEDO", c_byte)]
-    # Plotting options: EEG+EDO, Mag(I&Q), Phase(I&Q)
-    # Mag = sqrt(I^2 + Q^2)
-    # I = real, Q = imaginary
-    # Arctan(Q/I)
+
+class SaveDataMenuButton(QPushButton):
+    def __init__(self, running):
+
+        super().__init__("Save Data Menu")
+        self.clicked.connect(self.showPopup)
+
+        self.running = running
+
+        self.saveState = 0 # 0 is unchecked, 2 is checked
+        self.savePostprocessed = 0
+        self.filename = str(time())
+        self.updatedFilename = False
+
+    def showPopup(self):
+        self.menu = SaveDataMenu(self, self.running, self.saveState, self.savePostprocessed, self.filename)
+        self.menu.show()
+
+    def setSaveState(self, state):
+        self.saveState = state
+
+    def setSavePostprocessedState(self, state):
+        self.savePostprocessed = state
+
+    def setFilename(self, currText):
+        self.filename = str(currText)
+        self.updatedFilename = True
+
+    def setChangeable(self, changeable):
+        if self.menu:
+            self.menu.setChangeable(changeable)
+
+class SaveDataMenu(QWidget):
+    def __init__(self, button, running, saveState, savePostprocessed, filename):
+
+        super().__init__()
+        self.layout = QVBoxLayout()
+
+        self.button = button
+
+        self.saveState = QCheckBox("Save Data")
+        self.saveState.setCheckState(saveState)
+        self.saveState.stateChanged.connect(button.setSaveState)
+        self.saveState.setEnabled(not running.value)
+
+        self.savePostprocessed = QCheckBox("Include Postprocessed Data")
+        self.savePostprocessed.setCheckState(savePostprocessed)
+        self.savePostprocessed.stateChanged.connect(button.setSavePostprocessedState)
+        self.savePostprocessed.setEnabled(False)#(not running.value) This is not currently implemented so the checkbox is disabled
+
+        self.filenameLable = QLabel("Filename:")
+        self.filename = QLineEdit(filename)
+        self.filename.textChanged.connect(button.setFilename)
+        self.filename.setEnabled(not running.value)
+
+        self.filenameLayout = QHBoxLayout()
+        self.filenameLayout.addWidget(self.filenameLable)
+        self.filenameLayout.addWidget(self.filename)
+
+        self.tooltip = QLabel("Please enter your desired filename\nOn each start and stop numbers will be added to the end\n(abc -> \"abc-0\")")
+
+        self.layout.addWidget(self.saveState)
+        self.layout.addWidget(self.savePostprocessed)
+        self.layout.addLayout(self.filenameLayout)
+        self.layout.addWidget(self.tooltip)
+
+        self.setLayout(self.layout)
+
+    def setChangeable(self, changeable):
+        self.saveState.setEnabled(changeable)
+        self.savePostprocessed.setEnabled(changeable)
+        self.filename.setEnabled(changeable)
+
+class SaveDataWriter(QWidget):
+
+    def __init__(self, running, saveDataQueue, saveDataMenuButton):
+
+        super().__init__()
+
+        self.header = ["packet_id", "chx1_eeg", "chx1_i", "chx1_q", "chx1_edo", "chx2_eeg", "chx2_i", "chx2_q", "chx2_edo", "chx3_eeg", "chx3_i", "chx3_q", "chx3_edo", "chx4_eeg", "chx4_i", "chx4_q", "chx4_edo", "chx5_eeg", "chx5_i", "chx5_q", "chx5_edo", "chx6_eeg", "chx6_i", "chx6_q", "chx6_edo", "chx7_eeg", "chx7_i", "chx7_q", "chx7_edo", "chx8_eeg", "chx8_i", "chx8_q", "chx8_edo"]
+
+        self.running = running
+        self.saveDataQueue = saveDataQueue
+        self.saveDataMenuButton = saveDataMenuButton
+
+        self.setCurrFilename()
+
+        self.refreshRate = 5
+
+        self.hide()
+
+    def startSaveDataWriter(self):
+
+        self.timer = QTimer()
+        self.timer.setInterval(self.refreshRate)
+        self.timer.timeout.connect(self.writeData)
+        self.timer.start()
+
+    def writeData(self):
+        if bool(self.saveDataMenuButton.saveState) and bool(self.running.value) and not self.saveDataQueue.empty():
+            saveData = self.saveDataQueue.get() # Possibly not exitable on windows? https://docs.python.org/3/library/queue.html#put
+            shouldWriteHeader = not os.path.exists(self.currFilename)
+            with open(self.currFilename, 'a') as csvfile:
+                dataWriter = writer(csvfile)
+                if shouldWriteHeader:
+                    dataWriter.writerow(self.header)
+                dataWriter.writerow(saveData)
+            self.updatedExtenstion = False
+        elif (not self.updatedExtenstion or self.saveDataMenuButton.updatedFilename) and not bool(self.running.value):
+            self.setCurrFilename()
+
+    def setCurrFilename(self):
+        idx = 0
+        self.currFilename = "data/" + str(self.saveDataMenuButton.filename) + "-" + str(idx) + ".csv"
+        while os.path.exists(self.currFilename):
+            idx += 1
+            self.currFilename = "data/" + str(self.saveDataMenuButton.filename) + "-" + str(idx) + ".csv"
+        self.updatedExtenstion = True
+        self.saveDataMenuButton.updatedFilename = False
+        print(self.currFilename)
+        
 
 def main():
     app = QApplication(sys.argv)
