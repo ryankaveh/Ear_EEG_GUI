@@ -1,14 +1,15 @@
 import os, sys, serial, struct, math
 import numpy as np
 import multiprocessing as mp
+import simpleaudio as sa
 from time import sleep, time
 from queue import Queue
 from csv import writer
 from random import randint
 from ctypes import Structure, c_byte, c_short, c_int
 from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton, QCheckBox, QLineEdit
-from PyQt5.QtGui import QPalette, QColor
-from PyQt5.QtCore import Qt, QTimer, QProcess, QObject
+from PyQt5.QtGui import QPalette, QColor, QRegExpValidator
+from PyQt5.QtCore import Qt, QTimer, QProcess, QObject, QRegExp
 from pyqtgraph import PlotWidget, plot, mkPen
 
 class MainWindow(QMainWindow):
@@ -133,15 +134,18 @@ class CustomGridLayout(QGridLayout):
         saveDataWriter = SaveDataWriter(running, saveDataQueue, saveDataMenuButton)
         saveDataWriter.startSaveDataWriter()
 
-        # Adds plots and dropdown menus in a grid format, will have to add other buttons to row 1 later (start/stop, etc.)
-        self.parent.addLayout(combindedPlotColumnLayout, 0, 0, 1, 5)
-        self.parent.addWidget(saveDataMenuButton, 1, 0)
-        self.parent.addWidget(StartStop(running, saveDataMenuButton), 1, 1)
-        self.parent.addWidget(columnDropdowns0, 1, 3)
-        self.parent.addWidget(columnDropdowns1, 1, 4)
+        cueSystemButton = CueSystemButton()
 
-        self.parent.addWidget(serialReader, 1, 5) # The SerialReader and SaveDataWriter both hide themselves, are only attached to be in the event loop
-        self.parent.addWidget(saveDataWriter, 1, 6)
+        # Adds plots and dropdown menus in a grid format, will have to add other buttons to row 1 later (start/stop, etc.)
+        self.parent.addLayout(combindedPlotColumnLayout, 0, 0, 1, 6)
+        self.parent.addWidget(saveDataMenuButton, 1, 0)
+        self.parent.addWidget(cueSystemButton, 1, 1)
+        self.parent.addWidget(StartStop(running, saveDataMenuButton), 1, 2)
+        self.parent.addWidget(columnDropdowns0, 1, 4)
+        self.parent.addWidget(columnDropdowns1, 1, 5)
+
+        self.parent.addWidget(serialReader, 1, 6) # The SerialReader and SaveDataWriter both hide themselves, are only attached to be in the event loop
+        self.parent.addWidget(saveDataWriter, 1, 7)
 
         current.append([possPlotData[0], possPlotData[1]])
         current.append([possPlotData[2], possPlotData[3]])
@@ -737,8 +741,392 @@ class SaveDataWriter(QWidget):
             self.currFilename = "data/" + str(self.saveDataMenuButton.filename) + "-" + str(idx) + ".csv"
         self.updatedExtenstion = True
         self.saveDataMenuButton.updatedFilename = False
-        print(self.currFilename)
-        
+
+class CueSystemButton(QPushButton):
+    def __init__(self):
+
+        super().__init__("Cue System")
+        self.clicked.connect(self.showPopup)
+
+    def showPopup(self):
+        self.cueSystem = CueSystem()
+        self.cueSystem.show()
+
+class CueSystem(QWidget):
+    def __init__(self):
+
+        super().__init__()
+        self.layout = QVBoxLayout()
+
+        self.cuePrompt = QVBoxLayout()
+        self.cueParams = QVBoxLayout()
+
+        # Prompt setup
+        self.cueText = QLabel("No Test Running")
+
+        durationLabel = QLabel("Cue Duration")
+        self.currDuration = 0
+        self.duration = QLabel(str(self.currDuration) + "s")
+        self.duration.setStyleSheet("border: 1px solid black;")
+        durationLayout = QHBoxLayout()
+        durationLayout.addWidget(durationLabel)
+        durationLayout.addWidget(self.duration)
+
+        runtimeLabel = QLabel("Total Runtime")
+        self.currRuntime = 0
+        self.runtime = QLabel(str(self.currRuntime) + "s")
+        self.runtime.setStyleSheet("border: 1px solid black;")
+        runtimeLayout = QHBoxLayout()
+        runtimeLayout.addWidget(runtimeLabel)
+        runtimeLayout.addWidget(self.runtime)
+
+        self.cuePrompt.addWidget(self.cueText)
+        self.cuePrompt.addLayout(durationLayout)
+        self.cuePrompt.addLayout(runtimeLayout)
+
+        # Params setup
+        self.testSelection = QComboBox()
+        self.testSelection.addItems(["Eye Blinks", "Alpha", "ASSR: Clicks", "ASSR: AM Pure Tone", "ASSR: AM White Noise"])
+        self.testSelection.setCurrentIndex(0)
+        self.currParams = 0
+        self.testSelection.currentIndexChanged.connect(self.changeTest)
+        self.cueParams.addWidget(self.testSelection)
+
+        eyeBlinks = EyeBlinksLayout(self)
+        alpha = AlphaLayout(self)
+        clicks = ClicksLayout(self)
+        pureTone = PureToneLayout(self)
+        whiteNoise = WhiteNoiseLayout(self)
+
+        self.paramList = [eyeBlinks, alpha, clicks, pureTone, whiteNoise]
+
+        self.cueParams.addWidget(self.paramList[0])
+
+        self.layout.addLayout(self.cuePrompt)
+        self.layout.addLayout(self.cueParams)
+
+        self.setLayout(self.layout)
+
+        self.totalRuntimer = None
+        self.durationTimer = None
+    
+    def changeTest(self, idx):
+        self.layout.replaceWidget(self.paramList[self.currParams], self.paramList[idx])
+        self.paramList[idx].show()
+        self.paramList[self.currParams].hide()
+        self.currParams = idx
+    
+    def startTotalRuntime(self):
+        self.currRuntime = -1 # Needed for similar reason as +1 below, first tick should be 0s not 1s
+        self.runtime.setText("0s")
+
+        if self.totalRuntimer and self.totalRuntimer.isActive():
+            self.totalRuntimer.stop()
+        self.totalRuntimer = QTimer(self)
+        self.totalRuntimer.timeout.connect(self.updateTotalRuntime)
+        self.totalRuntimer.start(1000)
+
+    def updateTotalRuntime(self):
+        self.currRuntime += 1
+        self.runtime.setText(str(self.currRuntime) + "s")
+
+    def runTest(self, testName, testLayout):
+        self.currTest = testName
+
+        self.startTotalRuntime()
+
+        self.remainingStartDelay = int(testLayout.startDelay.text()) + 1 # This is needed because it ticks down immedßiately upon reaching that stage
+
+        self.remainingReps = int(testLayout.repetitions.text())
+
+        self.originalCueTime = int(testLayout.cueLength.text()) + 1
+        self.originalRestTime = int(testLayout.restLength.text()) + 1
+        self.remainingCueTime = self.originalCueTime
+        self.remainingRestTime = self.originalRestTime
+
+        self.remainingEndDelay = int(testLayout.endDelay.text()) + 1
+
+        if testName == "eyeBlinks" or "alpha":
+            self.cueAudio = testLayout.cueAudio.isChecked()
+        elif testName == "clicks":
+            print("Not done yet")
+        elif testName == "pureTone" or "whiteNoise":
+            print("not done yet")
+            if testName == "pureTone":
+                print("not done yet")
+
+        if self.durationTimer and self.durationTimer.isActive():
+            self.durationTimer.stop()
+        self.durationTimer = QTimer(self)
+        self.durationTimer.timeout.connect(self.updateDuration)
+        self.durationTimer.start(1000)
+
+    def updateDuration(self):
+        if self.remainingStartDelay > 1:
+            self.cueText.setText("Wait for test to start...")
+            self.remainingStartDelay -= 1
+            self.duration.setText(str(self.remainingStartDelay) + "s")
+            
+        elif self.remainingReps > 0:
+            if self.currTest == "eyeBlinks":
+                self.testEyeBlinks()
+            elif self.currTest == "alpha":
+                self.testAlpha()
+            elif self.currTest == "clicks":
+                self.testClicks()
+            elif self.currTest == "pureTone":
+                self.testPureTone()
+            elif self.currTest == "whiteNoise":
+                self.testWhiteNoise()
+
+        elif self.remainingEndDelay > 1:
+            self.cueText.setText("Wait for test to end...")
+            self.remainingEndDelay -= 1
+            self.duration.setText(str(self.remainingEndDelay) + "s")
+        else:
+            self.stopTest()
+
+    def testEyeBlinks(self):
+        if self.remainingRestTime > 1:
+            if self.cueAudio and self.remainingRestTime == self.originalRestTime:
+                self.beep(500, 1)
+            self.cueText.setText("Rest")
+            self.remainingRestTime -= 1
+            self.duration.setText(str(self.remainingRestTime) + "s")
+        elif self.remainingCueTime > 1:
+            if self.cueAudio and self.remainingCueTime == self.originalCueTime:
+                self.beep(500, 1)
+            self.cueText.setText("Blink")
+            self.remainingCueTime -= 1
+            self.duration.setText(str(self.remainingCueTime) + "s")
+            if self.remainingCueTime <= 1:
+                self.remainingReps -= 1
+                self.remainingRestTime = self.originalRestTime
+                self.remainingCueTime = self.originalCueTime
+
+    def testAlpha(self):
+        if self.remainingRestTime > 1:
+            if self.cueAudio and self.remainingRestTime == self.originalRestTime:
+                self.beep(500, 1)
+            self.cueText.setText("Eyes Open")
+            self.remainingRestTime -= 1
+            self.duration.setText(str(self.remainingRestTime) + "s")
+        elif self.remainingCueTime > 1:
+            if self.cueAudio and self.remainingCueTime == self.originalCueTime:
+                self.beep(500, 1)
+            self.cueText.setText("Eyes Closed")
+            self.remainingCueTime -= 1
+            self.duration.setText(str(self.remainingCueTime) + "s")
+            if self.remainingCueTime <= 1:
+                self.remainingReps -= 1
+                self.remainingRestTime = self.originalRestTime
+                self.remainingCueTime = self.originalCueTime
+
+    def testClicks(self):
+        print("Not done yet")
+
+    def testPureTone(self):
+        print("Not done yet")
+
+    def testWhiteNoise(self):
+        print("Not done yet")
+
+    def stopTest(self):
+        self.durationTimer.stop()
+        self.totalRuntimer.stop()
+        self.duration.setText("0s")
+        # self.runtime.setText("0s")
+
+    #Beeper sound setup
+    def beep(self, freq, length):
+        # 44100 samples per second
+        fs = 44100
+
+        # Generate array with seconds*sample_rate steps, ranging between 0 and seconds
+        t = np.linspace(0, length, length * fs, False)
+
+        # Generate a 440 Hz sine wave
+        note = np.sin(freq * t * 2 * np.pi)
+
+        # Ensure that highest value is in 16-bit range
+        audio = note * (2**15 - 1) / np.max(np.abs(note))
+
+        # Convert to 16-bit data
+        audio = audio.astype(np.int16)
+
+        # Start playback
+        play_obj = sa.play_buffer(audio, 1, 2, fs)
+
+class BaseCueParamLayout(QGridLayout):
+    def __init__(self):
+
+        self.parent = super()
+        self.parent.__init__()
+
+        self.numValidator = QRegExpValidator(QRegExp("[0-9]*"))
+
+        self.addWidget(QLabel("Start Delay:"), 0, 0)
+        self.startDelay = QLineEdit()
+        self.startDelay.setValidator(self.numValidator)
+        self.addWidget(self.startDelay, 0, 1)
+
+        self.addWidget(QLabel("End Delay:"), 1, 0)
+        self.endDelay = QLineEdit()
+        self.endDelay.setValidator(self.numValidator)
+        self.addWidget(self.endDelay, 1, 1)
+
+        self.addWidget(QLabel("Repetitions:"), 2, 0)
+        self.repetitions = QLineEdit()
+        self.repetitions.setValidator(self.numValidator)
+        self.addWidget(self.repetitions, 2, 1)
+
+        self.addWidget(QLabel("Cue Length:"), 0, 2)
+        self.cueLength = QLineEdit()
+        self.cueLength.setValidator(self.numValidator)
+        self.addWidget(self.cueLength, 0, 3)
+
+        self.addWidget(QLabel("Rest Length:"), 1, 2)
+        self.restLength = QLineEdit()
+        self.restLength.setValidator(self.numValidator)
+        self.addWidget(self.restLength, 1, 3)
+
+class EyeBlinksLayout(QWidget):
+    def __init__(self, cueSystem):
+
+        super().__init__()
+        self.layout = BaseCueParamLayout()
+
+        self.startDelay = self.layout.startDelay
+        self.endDelay = self.layout.endDelay
+        self.repetitions = self.layout.repetitions
+        self.cueLength = self.layout.cueLength
+        self.restLength = self.layout.restLength
+
+        self.layout.addWidget(QLabel("Cue Audio:"), 2, 2)
+        self.cueAudio = QCheckBox()
+        self.layout.addWidget(self.cueAudio, 2, 3)
+
+        self.start = QPushButton("Start")
+        self.start.clicked.connect(lambda: cueSystem.runTest("eyeBlinks", self))
+        self.layout.addWidget(self.start, 3, 0)
+
+        self.setLayout(self.layout)
+
+class AlphaLayout(QWidget):
+    def __init__(self, cueSystem):
+
+        super().__init__()
+        self.layout = BaseCueParamLayout()
+
+        self.startDelay = self.layout.startDelay
+        self.endDelay = self.layout.endDelay
+        self.repetitions = self.layout.repetitions
+        self.cueLength = self.layout.cueLength
+        self.restLength = self.layout.restLength
+
+        self.layout.addWidget(QLabel("Cue Audio:"), 2, 2)
+        self.cueAudio = QCheckBox()
+        self.layout.addWidget(self.cueAudio, 2, 3)
+
+        self.start = QPushButton("Start")
+        self.start.clicked.connect(lambda: cueSystem.runTest("alpha", self))
+        self.layout.addWidget(self.start, 3, 0)
+
+        self.setLayout(self.layout)
+
+class ClicksLayout(QWidget):
+    def __init__(self, cueSystem):
+
+        super().__init__()
+        self.layout = BaseCueParamLayout()
+
+        self.startDelay = self.layout.startDelay
+        self.endDelay = self.layout.endDelay
+        self.repetitions = self.layout.repetitions
+        self.cueLength = self.layout.cueLength
+        self.restLength = self.layout.restLength
+
+        self.layout.addWidget(QLabel("Click Frequency:"), 2, 2)
+        self.clickFreq = QLineEdit()
+        self.clickFreq.setValidator(self.layout.numValidator)
+        self.layout.addWidget(self.clickFreq, 2, 3)
+
+        self.start = QPushButton("Start")
+        self.start.clicked.connect(lambda: cueSystem.runTest("clicks", self))
+        self.layout.addWidget(self.start, 3, 0)
+
+        self.setLayout(self.layout)
+
+class PureToneLayout(QWidget):
+    def __init__(self, cueSystem):
+
+        super().__init__()
+        self.layout = BaseCueParamLayout()
+
+        self.startDelay = self.layout.startDelay
+        self.endDelay = self.layout.endDelay
+        self.repetitions = self.layout.repetitions
+        self.cueLength = self.layout.cueLength
+        self.restLength = self.layout.restLength
+
+        self.layout.addWidget(QLabel("Carrier Frequency:"), 3, 0)
+        self.carrierFreq = QLineEdit()
+        self.carrierFreq.setValidator(self.layout.numValidator)
+        self.layout.addWidget(self.carrierFreq, 3, 1)
+
+        self.layout.addWidget(QLabel("AM Frequency:"), 4, 0)
+        self.amFreq = QLineEdit()
+        self.amFreq.setValidator(self.layout.numValidator)
+        self.layout.addWidget(self.amFreq, 4, 1)
+
+        self.layout.addWidget(QLabel("Carrier Amp:"), 2, 2)
+        self.carrierAmp = QLineEdit()
+        self.carrierAmp.setValidator(self.layout.numValidator)
+        self.layout.addWidget(self.carrierAmp, 2, 3)
+
+        self.layout.addWidget(QLabel("Modulating Amp:"), 3, 2)
+        self.modAmp = QLineEdit()
+        self.modAmp.setValidator(self.layout.numValidator)
+        self.layout.addWidget(self.modAmp, 3, 3)
+
+        self.start = QPushButton("Start")
+        self.start.clicked.connect(lambda: cueSystem.runTest("pureTone", self))
+        self.layout.addWidget(self.start, 5, 0)
+
+        self.setLayout(self.layout)
+
+class WhiteNoiseLayout(QWidget):
+    def __init__(self, cueSystem):
+
+        super().__init__()
+        self.layout = BaseCueParamLayout()
+
+        self.startDelay = self.layout.startDelay
+        self.endDelay = self.layout.endDelay
+        self.repetitions = self.layout.repetitions
+        self.cueLength = self.layout.cueLength
+        self.restLength = self.layout.restLength
+
+        self.layout.addWidget(QLabel("AM Frequency:"), 3, 0)
+        self.amFreq = QLineEdit()
+        self.amFreq.setValidator(self.layout.numValidator)
+        self.layout.addWidget(self.amFreq, 3, 1)
+
+        self.layout.addWidget(QLabel("Carrier Amp:"), 2, 2)
+        self.carrierAmp = QLineEdit()
+        self.carrierAmp.setValidator(self.layout.numValidator)
+        self.layout.addWidget(self.carrierAmp, 2, 3)
+
+        self.layout.addWidget(QLabel("Modulating Amp:"), 3, 2)
+        self.modAmp = QLineEdit()
+        self.modAmp.setValidator(self.layout.numValidator)
+        self.layout.addWidget(self.modAmp, 3, 3)
+
+        self.start = QPushButton("Start")
+        self.start.clicked.connect(lambda: cueSystem.runTest("whiteNoise", self))
+        self.layout.addWidget(self.start, 4, 0)
+
+        self.setLayout(self.layout)
 
 def main():
     app = QApplication(sys.argv)
