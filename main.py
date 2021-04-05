@@ -44,30 +44,31 @@ class MainWindow(QMainWindow):
         serialReader = SerialReader(port, channelDataArr, saveDataQueue)
         serialReader.startSerialReader()
 
-        # Currently creates 'numPlots' identical test graphs, eventually each graph will be created individually
+        xAxisLength = 100
+
         for i in range(numChannels): 
-            eegPlusEDODataProcess = EEGPlusEDODataProcess(running, channelDataArr[i % numChannels])
+            eegPlusEDODataProcess = EEGPlusEDODataProcess(running, channelDataArr[i % numChannels], xAxisLength)
             p = mp.Process(target=eegPlusEDODataProcess.startUpdateData)
             p.daemon = True
             p.start()
 
             possPlotData.append(("Ch " + str(i) + " EEG + EDO", eegPlusEDODataProcess))
 
-            iQMagDataProcess = IQMagDataProcess(running, channelDataArr[i % numChannels])
+            iQMagDataProcess = IQMagDataProcess(running, channelDataArr[i % numChannels], xAxisLength)
             p = mp.Process(target=iQMagDataProcess.startUpdateData)
             p.daemon = True
             p.start()
 
             possPlotData.append(("Ch " + str(i) + " mag(I&Q)", iQMagDataProcess))
 
-            iQPhaseDataProcess = IQPhaseDataProcess(running, channelDataArr[i % numChannels])
+            iQPhaseDataProcess = IQPhaseDataProcess(running, channelDataArr[i % numChannels], xAxisLength)
             p = mp.Process(target=iQPhaseDataProcess.startUpdateData)
             p.daemon = True
             p.start()
 
             possPlotData.append(("Ch " + str(i) + " phase(I&Q)", iQPhaseDataProcess))
 
-        layout = CustomGridLayout(running, possPlotData, serialReader, saveDataQueue)
+        layout = CustomGridLayout(running, possPlotData, serialReader, saveDataQueue, xAxisLength)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
@@ -76,7 +77,7 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, running, possPlotData, serialReader, saveDataQueue):
+    def __init__(self, running, possPlotData, serialReader, saveDataQueue, xAxisLength):
 
         self.parent = super()
         self.parent.__init__()
@@ -135,18 +136,20 @@ class CustomGridLayout(QGridLayout):
         saveDataWriter = SaveDataWriter(running, saveDataQueue, saveDataMenuButton)
         saveDataWriter.startSaveDataWriter()
 
-        cueSystemButton = CueSystemButton()
+        startStop = StartStop(running, saveDataMenuButton)
+        cueSystemButton = CueSystemButton(running, startStop)
 
         # Adds plots and dropdown menus in a grid format, will have to add other buttons to row 1 later (start/stop, etc.)
         self.parent.addLayout(combindedPlotColumnLayout, 0, 0, 1, 6)
         self.parent.addWidget(saveDataMenuButton, 1, 0)
         self.parent.addWidget(cueSystemButton, 1, 1)
-        self.parent.addWidget(StartStop(running, saveDataMenuButton), 1, 2)
-        self.parent.addWidget(columnDropdowns0, 1, 4)
-        self.parent.addWidget(columnDropdowns1, 1, 5)
+        self.parent.addWidget(startStop, 1, 2)
+        self.parent.addWidget(XAxisResizer(possPlotData, xAxisLength), 1, 3)
+        self.parent.addWidget(columnDropdowns0, 2, 0, 1, 6)
+        self.parent.addWidget(columnDropdowns1, 3, 0, 1, 6)
 
-        self.parent.addWidget(serialReader, 1, 6) # The SerialReader and SaveDataWriter both hide themselves, are only attached to be in the event loop
-        self.parent.addWidget(saveDataWriter, 1, 7)
+        self.parent.addWidget(serialReader, 4, 0) # The SerialReader and SaveDataWriter both hide themselves, are only attached to be in the event loop
+        self.parent.addWidget(saveDataWriter, 4, 1)
 
         current.append([possPlotData[0], possPlotData[1]])
         current.append([possPlotData[2], possPlotData[3]])
@@ -162,31 +165,79 @@ class StartStop(QWidget):
         self.saveDataMenuButton = saveDataMenuButton
         self.layout = QHBoxLayout()
 
-        startButton = QPushButton("Start")
-        startButton.clicked.connect(self.start)
+        self.startButton = QPushButton("Start")
+        self.startButton.clicked.connect(self.start)
 
-        stopButton = QPushButton("Stop")
-        stopButton.clicked.connect(self.stop)
-        stopButton.setDisabled(True)
+        self.stopButton = QPushButton("Stop")
+        self.stopButton.clicked.connect(self.stop)
+        self.stopButton.setDisabled(True)
 
-        self.layout.addWidget(startButton, 1)
-        self.layout.addWidget(stopButton, 1)
+        self.layout.addWidget(self.startButton, 1)
+        self.layout.addWidget(self.stopButton, 1)
 
         self.setLayout(self.layout)
+
+        self.cueSystem = None
+        self.synced = None
     
     def start(self):
+
         self.running.value = True
         self.saveDataMenuButton.setChangeable(False)
-        startButton.setDisabled(True)
-        stopButton.setDisabled(False)
+        self.startButton.setDisabled(True)
+        self.stopButton.setDisabled(False)
+
+        if self.cueSystem:
+            self.cueSystem.startStopSync.setDisabled(True)
+        if self.synced:
+            self.cueSystem.runTest()
 
     def stop(self):
+
         self.running.value = False
         self.saveDataMenuButton.setChangeable(True)
-        stopButton.setDisabled(True)
-        startButton.setDisabled(False)
+        self.stopButton.setDisabled(True)
+        self.startButton.setDisabled(False)
 
-    
+        if self.cueSystem:
+            self.cueSystem.startStopSync.setDisabled(False)
+        if self.synced:
+            self.cueSystem.stopTest()
+
+    def setCueSync(self, cueSystem, syncState):
+
+        self.cueSystem = cueSystem
+        self.synced = syncState
+
+class XAxisResizer(QWidget):
+
+    def __init__(self, possPlotData, currXAxisLength):
+
+        super().__init__()
+
+        self.possPlotData = possPlotData
+        self.currXAxisLength = currXAxisLength
+
+        self.layout = QHBoxLayout()
+
+        self.xAxisLength = QLineEdit()
+        self.xAxisLength.setValidator(QRegExpValidator(QRegExp("[0-9]*")))
+
+        self.xAxisResizeButton = QPushButton("Resize")
+        self.xAxisResizeButton.clicked.connect(self.resize)
+        self.xAxisResizeButton.setDisabled(True) # TODO: setEnabled vs. setDisabled why do I use both
+
+        self.layout.addWidget(self.xAxisLength)
+        self.layout.addWidget(self.xAxisResizeButton)
+
+        self.setLayout(self.layout)
+
+    def resize(self):
+
+        newLength = int(self.xAxisLength.text())
+        for dataProcess in self.possPlotData:
+            dataProcess[1].resizeXAxis(newLength)
+        
 
 # Class containing all of the dropdown menues corrosponding to a certain PlotColumn
 class ColumnDropdowns(QWidget):
@@ -444,22 +495,35 @@ class DataProcess():
         # [:] needed to extract array from multiprocessing.Array
         return self.x[:], self.y[:]
 
+    def resizeXAxis(self, newXAxisLength):
+
+        if newXAxisLength > self.xAxisLength:
+            diff = newXAxisLength - self.xAxisLength
+            print(diff)
+            self.trueX = range(self.counter + 1, self.counter + diff + 1) + self.trueX
+            self.trueY = ([0] * diff) + self.trueY
+            # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
+            self.x = mp.Array('d', [0] * newXAxisLength)
+            self.y = mp.Array('d', [0] * newXAxisLength)
+
+
 # Data process for a simple sine wave
 class EEGPlusEDODataProcess(DataProcess):
     
-    def __init__(self, running, channelData):
+    def __init__(self, running, channelData, xAxisLength):
 
         self.running = running
         self.channelData = channelData
+        self.xAxisLength = xAxisLength
         self.currPacket = -1
-        self.counter = 0 # Is there a better way to repsent the x axis?
+        self.counter = -1 # Is there a better way to repsent the x axis?
 
         # These lists are used to keep track of the true value as the lock can sometimes prevent a write
-        self.trueX = list(np.arange(-100, 0, 1))
-        self.trueY = [0] * 100
+        self.trueX = list(range(-xAxisLength, 0))
+        self.trueY = [0] * xAxisLength
         # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
-        self.x = mp.Array('d', list(np.arange(-100, 0, 1)))
-        self.y = mp.Array('d', [0] * 100)        
+        self.x = mp.Array('d', list(range(-xAxisLength, 0))) # HERE: trying to understand we need to use mp arrays if we are just extracting the data anyway to fix resize issue
+        self.y = mp.Array('d', [0] * xAxisLength)        
 
     def updateData(self):
         newX = self.counter + 1 # TODO: This should prob be updated to use the difference between the current and next packet ID
@@ -479,19 +543,20 @@ class EEGPlusEDODataProcess(DataProcess):
 # Data process for a simple sine wave
 class IQMagDataProcess(DataProcess):
     
-    def __init__(self, running, channelData):
+    def __init__(self, running, channelData, xAxisLength):
 
         self.running = running
         self.channelData = channelData
+        self.xAxisLength = xAxisLength
         self.currPacket = -1
-        self.counter = 0
+        self.counter = -1
 
         # These lists are used to keep track of the true value as the lock can sometimes prevent a write
-        self.trueX = list(np.arange(-100, 0, 1))
-        self.trueY = [0] * 100
+        self.trueX = list(range(-xAxisLength, 0))
+        self.trueY = [0] * xAxisLength
         # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
-        self.x = mp.Array('d', list(np.arange(-100, 0, 1)))
-        self.y = mp.Array('d', [0] * 100)        
+        self.x = mp.Array('d', list(range(-xAxisLength, 0)))
+        self.y = mp.Array('d', [0] * xAxisLength)        
 
     def updateData(self):
         newX = self.counter + 1
@@ -511,19 +576,20 @@ class IQMagDataProcess(DataProcess):
 # Data process for a simple sine wave
 class IQPhaseDataProcess(DataProcess):
     
-    def __init__(self, running, channelData):
+    def __init__(self, running, channelData, xAxisLength):
 
         self.running = running
         self.channelData = channelData
+        self.xAxisLength = xAxisLength
         self.currPacket = -1
-        self.counter = 0
+        self.counter = -1
 
         # These lists are used to keep track of the true value as the lock can sometimes prevent a write
-        self.trueX = list(np.arange(-100, 0, 1))
-        self.trueY = [0] * 100
+        self.trueX = list(range(-xAxisLength, 0))
+        self.trueY = [0] * xAxisLength
         # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
-        self.x = mp.Array('d', list(np.arange(-100, 0, 1)))
-        self.y = mp.Array('d', [0] * 100)        
+        self.x = mp.Array('d', list(range(-xAxisLength, 0)))
+        self.y = mp.Array('d', [0] * xAxisLength)        
 
     def updateData(self):
         newX = self.counter + 1
@@ -598,6 +664,7 @@ class ChannelData(Structure):
     _fields_ = [("packetId", c_byte), ("chxEEG", c_int), ("chxI", c_short), ("chxQ", c_short), ("chxEDO", c_byte)]
 
 class SaveDataMenuButton(QPushButton):
+
     def __init__(self, running):
 
         super().__init__("Save Data Menu")
@@ -610,9 +677,14 @@ class SaveDataMenuButton(QPushButton):
         self.filename = str(time())
         self.updatedFilename = False
 
+        self.menu = None
+
     def showPopup(self):
-        self.menu = SaveDataMenu(self, self.running, self.saveState, self.savePostprocessed, self.filename)
-        self.menu.show()
+        if not self.menu:
+            self.menu = SaveDataMenu(self, self.running, self.saveState, self.savePostprocessed, self.filename)
+            self.menu.show()
+        else:
+            self.menu.show()
 
     def setSaveState(self, state):
         self.saveState = state
@@ -629,6 +701,7 @@ class SaveDataMenuButton(QPushButton):
             self.menu.setChangeable(changeable)
 
 class SaveDataMenu(QWidget):
+
     def __init__(self, button, running, saveState, savePostprocessed, filename):
 
         super().__init__()
@@ -665,6 +738,7 @@ class SaveDataMenu(QWidget):
         self.setLayout(self.layout)
 
     def setChangeable(self, changeable):
+
         self.saveState.setEnabled(changeable)
         self.savePostprocessed.setEnabled(changeable)
         self.filename.setEnabled(changeable)
@@ -717,19 +791,33 @@ class SaveDataWriter(QWidget):
         self.saveDataMenuButton.updatedFilename = False
 
 class CueSystemButton(QPushButton):
-    def __init__(self):
+
+    def __init__(self, running, startStop):
 
         super().__init__("Cue System")
+        self.running = running
+        self.startStop = startStop
+
         self.clicked.connect(self.showPopup)
 
+        self.cueSystem = None
+
     def showPopup(self):
-        self.cueSystem = CueSystem()
-        self.cueSystem.show()
+        if not self.cueSystem:
+            self.cueSystem = CueSystem(self.running, self.startStop)
+            self.cueSystem.show()
+        else:
+            self.cueSystem.show()
 
 class CueSystem(QWidget):
-    def __init__(self):
+
+    def __init__(self, running, startStop):
 
         super().__init__()
+
+        self.running = running
+        self.startStop = startStop
+
         self.layout = QVBoxLayout()
 
         self.cuePrompt = CuePrompt()
@@ -741,6 +829,9 @@ class CueSystem(QWidget):
         self.spacer = QFrame()
         self.spacer.setFrameShape(QFrame.HLine)
         self.spacer.setLineWidth(5)
+
+        self.tooltipLabel = QLabel("")
+        self.tooltipLabel.hide()
 
         # Params setup
         self.baseParams = BaseCueParamLayout()
@@ -764,6 +855,27 @@ class CueSystem(QWidget):
 
         self.cueParams.addWidget(self.paramList[0])
 
+        cueStartStopLayout = QGridLayout()
+
+        self.cueStart = QPushButton("Start")
+        self.cueStart.clicked.connect(self.runTest)
+        cueStartStopLayout.addWidget(self.cueStart, 0, 0)
+        self.cueStop = QPushButton("Stop")
+        self.cueStop.clicked.connect(self.stopTest)
+        cueStartStopLayout.addWidget(self.cueStop, 0, 1)
+        self.cueStop.setDisabled(True)
+        
+        startStopSyncLabel = QLabel("Sync Start/Stop Buttons")
+        self.startStopSync = QCheckBox()
+        self.startStopSync.stateChanged.connect(self.syncStateChange)
+        if self.running.value:
+            self.startStopSync.setEnabled(False)
+        self.startStop.setCueSync(self, False)
+        startStopSyncLayout = QHBoxLayout()
+        startStopSyncLayout.addWidget(startStopSyncLabel)
+        startStopSyncLayout.addWidget(self.startStopSync)
+        cueStartStopLayout.addLayout(startStopSyncLayout, 1, 0)
+
         self.splitWindowButton = QPushButton("Split Cue Window")
         self.splitWindowButton.clicked.connect(self.splitWindow)
         self.reformWindowButton = QPushButton("Reform Cue Window")
@@ -772,7 +884,9 @@ class CueSystem(QWidget):
 
         self.layout.addWidget(self.cuePrompt)
         self.layout.addWidget(self.spacer)
+        self.layout.addWidget(self.tooltipLabel)
         self.layout.addLayout(self.cueParams)
+        self.layout.addLayout(cueStartStopLayout)
         self.layout.addWidget(self.splitWindowButton)
         self.layout.addWidget(self.reformWindowButton)
 
@@ -781,22 +895,36 @@ class CueSystem(QWidget):
         self.totalRuntimer = None
         self.durationTimer = None
 
+    def displayTooltip(self, msg):
+        self.tooltipLabel.setText(msg)
+        self.tooltipLabel.show()
+
+    def resetTooltip(self):
+        self.tooltipLabel.setText("")
+        self.tooltipLabel.hide()
+
     def splitWindow(self):
 
         self.layout.removeWidget(self.cuePrompt)
         self.cuePrompt.setParent(None)
         self.cuePrompt.show()
+        self.spacer.hide()
         self.splitWindowButton.hide()
         self.reformWindowButton.show()
 
     def reformWindow(self):
 
+        self.spacer.show()
         self.cuePrompt.deleteLater() # This is obviously a little hacky but if we don't recreate the cue prompt it throws warnings about apple KVOs which seems worse
         self.cuePrompt = CuePrompt()
         self.layout.insertWidget(0, self.cuePrompt)
         self.reformWindowButton.hide()
         self.splitWindowButton.show()
-    
+
+    def syncStateChange(self, state):
+
+            self.startStop.setCueSync(self, state)
+
     def changeTest(self, idx):
 
         self.layout.replaceWidget(self.paramList[self.currParams], self.paramList[idx])
@@ -820,20 +948,29 @@ class CueSystem(QWidget):
         self.currRuntime += 1
         self.cuePrompt.runtime.setText(str(self.currRuntime) + "s")
 
-    def runTest(self, testName, testLayout):
+    def runTest(self):
 
+        self.cueStart.setDisabled(True)
+        self.startStopSync.setDisabled(True)
+        self.cueStop.setDisabled(False)
+
+        self.resetTooltip()
+
+        if self.startStopSync.checkState() and not self.running.value: # And statment is to stop recursion
+            self.startStop.start()
+
+        testLayout = self.paramList[self.testSelection.currentIndex()]
+        self.currTest = testLayout.name
         startDelayText = self.baseParams.startDelay.text()
         remainingRepsText = self.baseParams.repetitions.text()
         cueLengthText = self.baseParams.cueLength.text()
         restLengthText = self.baseParams.restLength.text()
         endDelayText = self.baseParams.endDelay.text()
 
-
         if not (startDelayText and remainingRepsText and cueLengthText and restLengthText and endDelayText):
             self.cuePrompt.cueText.setText("Missing Value")
+            self.stopTest()
             return
-
-        self.currTest = testName
 
         self.remainingStartDelay = int(startDelayText) + 1 # This is needed because it ticks down immediately upon reaching that stage
 
@@ -846,31 +983,34 @@ class CueSystem(QWidget):
 
         self.remainingEndDelay = int(endDelayText) + 1
 
-        if testName == "eyeBlinks" or testName == "alpha":
+        if self.currTest == "eyeBlinks" or self.currTest == "alpha":
             self.cueAudio = testLayout.cueAudio.isChecked()
-        elif testName == "clicks":
+        elif self.currTest == "clicks":
             clickFreqText = testLayout.clickFreq.text()
             if not clickFreqText:
-                self.cuePrompt.cueText.setText("Missing Value")
+                self.displayTooltip("Missing Value")
+                self.stopTest()
                 return
             self.clickFreq = int(clickFreqText)
-        elif testName == "pureTone" or testName == "whiteNoise":
+        elif self.currTest == "pureTone" or self.currTest == "whiteNoise":
             amFreqText = testLayout.amFreq.text()
             carrierAmpText = testLayout.carrierAmp.text()
             modAmpText = testLayout.modAmp.text()
             
             if not (amFreqText and carrierAmpText and modAmpText):
-                self.cuePrompt.cueText.setText("Missing Value")
+                self.displayTooltip("Missing Value")
+                self.stopTest()
                 return
 
             self.amFreq = int(amFreqText)
             self.carrierAmp = int(carrierAmpText)
             self.modAmp = int(modAmpText)
 
-            if testName == "pureTone":
+            if self.currTest == "pureTone":
                 carrierFreqText = testLayout.carrierFreq.text()
                 if not carrierFreqText:
-                    self.cuePrompt.cueText.setText("Missing Value")
+                    self.displayTooltip("Missing Value")
+                    self.stopTest()
                     return
                 self.carrierFreq = int(carrierFreqText)
 
@@ -960,10 +1100,22 @@ class CueSystem(QWidget):
                 self.remainingCueTime = self.originalCueTime
 
     def stopTest(self):
-        self.durationTimer.stop()
-        self.totalRuntimer.stop()
+
+        if self.durationTimer:
+            self.durationTimer.stop()
+        if self.totalRuntimer:
+            self.totalRuntimer.stop()
         self.cuePrompt.duration.setText("0s")
         self.cuePrompt.cueText.setText("No Test Running")
+
+        self.cueStop.setDisabled(True)
+        self.startStopSync.setDisabled(False)
+        self.cueStart.setDisabled(False)
+
+        self.resetTooltip()
+
+        if self.startStopSync.checkState() and self.running.value:
+            self.startStop.stop()
 
     def playAudio(self, testName, length):
 
@@ -1004,6 +1156,7 @@ class CueSystem(QWidget):
         sa.play_buffer(fullSound, 1, 4, samplingFreq)
 
 class CuePrompt(QWidget):
+
     def __init__(self):
 
         super().__init__()
@@ -1033,8 +1186,8 @@ class CuePrompt(QWidget):
 
         self.setLayout(self.layout)
 
-
 class BaseCueParamLayout(QFrame):
+
     def __init__(self):
 
         super().__init__()
@@ -1070,41 +1223,42 @@ class BaseCueParamLayout(QFrame):
         self.setLayout(self.layout)
 
 class EyeBlinksLayout(QWidget):
+
     def __init__(self, cueSystem):
 
         super().__init__()
+
+        self.name = "eyeBlinks"
         self.layout = QGridLayout()
 
         self.layout.addWidget(QLabel("Cue Audio:"), 0, 0)
         self.cueAudio = QCheckBox()
         self.layout.addWidget(self.cueAudio, 0, 1)
-
-        self.start = QPushButton("Start")
-        self.start.clicked.connect(lambda: cueSystem.runTest("eyeBlinks", self))
-        self.layout.addWidget(self.start, 1, 0)
 
         self.setLayout(self.layout)
 
 class AlphaLayout(QWidget):
+
     def __init__(self, cueSystem):
 
         super().__init__()
+
+        self.name = "alpha"
         self.layout = QGridLayout()
 
         self.layout.addWidget(QLabel("Cue Audio:"), 0, 0)
         self.cueAudio = QCheckBox()
         self.layout.addWidget(self.cueAudio, 0, 1)
 
-        self.start = QPushButton("Start")
-        self.start.clicked.connect(lambda: cueSystem.runTest("alpha", self))
-        self.layout.addWidget(self.start, 1, 0)
-
         self.setLayout(self.layout)
 
 class ClicksLayout(QWidget):
+
     def __init__(self, cueSystem):
 
         super().__init__()
+
+        self.name = "clicks"
         self.layout = QGridLayout()
 
         numValidator = QRegExpValidator(QRegExp("[0-9]*"))
@@ -1114,16 +1268,15 @@ class ClicksLayout(QWidget):
         self.clickFreq.setValidator(numValidator)
         self.layout.addWidget(self.clickFreq, 0, 1)
 
-        self.start = QPushButton("Start")
-        self.start.clicked.connect(lambda: cueSystem.runTest("clicks", self))
-        self.layout.addWidget(self.start, 1, 0)
-
         self.setLayout(self.layout)
 
 class PureToneLayout(QWidget):
+
     def __init__(self, cueSystem):
 
         super().__init__()
+
+        self.name = "pureTone"
         self.layout = QGridLayout()
 
         numValidator = QRegExpValidator(QRegExp("[0-9]*"))
@@ -1148,16 +1301,15 @@ class PureToneLayout(QWidget):
         self.amFreq.setValidator(numValidator)
         self.layout.addWidget(self.amFreq, 1, 3)
 
-        self.start = QPushButton("Start")
-        self.start.clicked.connect(lambda: cueSystem.runTest("pureTone", self))
-        self.layout.addWidget(self.start, 3, 0)
-
         self.setLayout(self.layout)
 
 class WhiteNoiseLayout(QWidget):
+
     def __init__(self, cueSystem):
 
         super().__init__()
+
+        self.name = "whiteNoise"
         self.layout = QGridLayout()
 
         numValidator = QRegExpValidator(QRegExp("[0-9]*"))
@@ -1176,10 +1328,6 @@ class WhiteNoiseLayout(QWidget):
         self.amFreq = QLineEdit()
         self.amFreq.setValidator(numValidator)
         self.layout.addWidget(self.amFreq, 0, 3)
-
-        self.start = QPushButton("Start")
-        self.start.clicked.connect(lambda: cueSystem.runTest("whiteNoise", self))
-        self.layout.addWidget(self.start, 4, 0)
 
         self.setLayout(self.layout)
 
