@@ -1,4 +1,4 @@
-import os, sys, serial, struct, math
+import os, sys, serial, struct, math, atexit
 import numpy as np
 import multiprocessing as mp
 import simpleaudio as sa
@@ -7,12 +7,20 @@ from time import sleep, time
 from queue import Queue
 from csv import writer
 from random import randint
-from ctypes import Structure, c_byte, c_short, c_int
+from ctypes import Structure, c_ubyte, c_byte, c_short, c_int
 from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton, QCheckBox, QLineEdit, QFrame
 from PyQt5.QtGui import QPalette, QColor, QRegExpValidator
 from PyQt5.QtCore import Qt, QTimer, QProcess, QObject, QRegExp
 from pyqtgraph import PlotWidget, plot, mkPen
 
+###
+# Known Issues:
+#
+# Sometimes you have to click start twice the first time. Its something weird with pyqt so idk how to fix it.
+#
+# AttributeError: 'ForkAwareLocal' object has no attribute 'connection' appears to be something with the manager shutting down? Or maybe too many simultanious manager reads? 
+# I might have fixed it by including it in CustomGridLayout but then again it might still be broken. A rare error either way but problematic. TODO
+###
 class MainWindow(QMainWindow):
 
     def __init__(self, *args, **kwargs):
@@ -29,6 +37,8 @@ class MainWindow(QMainWindow):
 
         # colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w'] # Background colors of the graphs, currently used as otherwise all graphs would look identical
 
+        self.manager = mp.Manager()
+
         running = mp.Value('i', False) # Univerally controls whether the DataProcesses run and CustomGraphWidgets redraw themselves
 
         # Creates SerialReader object to read data from serial port "port", populate channelDataArr and save the data to saveDataQueue
@@ -39,48 +49,81 @@ class MainWindow(QMainWindow):
             lock = mp.RLock()
             channelDataArr.append(mp.Value(ChannelData, 0, 0, 0, 0, lock=lock))
 
-        saveDataQueue = Queue()
+        saveDataQueue = self.manager.Queue()
 
-        serialReader = SerialReader(port, channelDataArr, saveDataQueue)
-        serialReader.startSerialReader()
+        condition = mp.Condition()
+
+        serialReader = SerialReader(port, channelDataArr, saveDataQueue, condition)
+        self.serialReaderProcess = mp.Process(target=serialReader.startSerialReader)
+        self.serialReaderProcess.daemon = True
+        self.serialReaderProcess.start()
+
+        with condition:
+            condition.wait() # Implies serial reader has connected
 
         xAxisLength = 100
 
-        for i in range(numChannels): 
-            eegPlusEDODataProcess = EEGPlusEDODataProcess(running, channelDataArr[i % numChannels], xAxisLength)
+        self.processes = []
+        for i in range(numChannels):
+            managedX = self.manager.list()
+            managedY = self.manager.list()
+            managedAxisLen = mp.Value('i', xAxisLength)
+            managedCounter = mp.Value('i', -1)
+            eegPlusEDODataProcess = EEGPlusEDODataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, managedCounter)
             p = mp.Process(target=eegPlusEDODataProcess.startUpdateData)
             p.daemon = True
             p.start()
+            self.processes.append(p)
 
             possPlotData.append(("Ch " + str(i) + " EEG + EDO", eegPlusEDODataProcess))
 
-            iQMagDataProcess = IQMagDataProcess(running, channelDataArr[i % numChannels], xAxisLength)
+            managedX = self.manager.list()
+            managedY = self.manager.list()
+            managedAxisLen = mp.Value('i', xAxisLength)
+            managedCounter = mp.Value('i', -1)
+            iQMagDataProcess = IQMagDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, managedCounter)
             p = mp.Process(target=iQMagDataProcess.startUpdateData)
             p.daemon = True
             p.start()
+            self.processes.append(p)
 
             possPlotData.append(("Ch " + str(i) + " mag(I&Q)", iQMagDataProcess))
 
-            iQPhaseDataProcess = IQPhaseDataProcess(running, channelDataArr[i % numChannels], xAxisLength)
+            managedX = self.manager.list()
+            managedY = self.manager.list()
+            managedAxisLen = mp.Value('i', xAxisLength)
+            managedCounter = mp.Value('i', -1)
+            iQPhaseDataProcess = IQPhaseDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, managedCounter)
             p = mp.Process(target=iQPhaseDataProcess.startUpdateData)
             p.daemon = True
             p.start()
+            self.processes.append(p)
 
             possPlotData.append(("Ch " + str(i) + " phase(I&Q)", iQPhaseDataProcess))
 
-        layout = CustomGridLayout(running, possPlotData, serialReader, saveDataQueue, xAxisLength)
+        layout = CustomGridLayout(running, possPlotData, serialReader, saveDataQueue, xAxisLength, self.manager)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
 
         self.setCentralWidget(mainWidget)
 
+        atexit.register(self.exitGracefully)
+
+    def exitGracefully(self):
+        for p in self.processes:
+            p.terminate()
+        self.serialReaderProcess.terminate()
+        sys.exit()
+
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, running, possPlotData, serialReader, saveDataQueue, xAxisLength):
+    def __init__(self, running, possPlotData, serialReader, saveDataQueue, xAxisLength, manager):
 
         self.parent = super()
         self.parent.__init__()
+
+        self.manager = manager # This might have fixed the "AttributeError: 'ForkAwareLocal' object has no attribute 'connection'" error but idk
 
         current = [] # Universal 2d list of current plots being shown
 
@@ -148,7 +191,7 @@ class CustomGridLayout(QGridLayout):
         self.parent.addWidget(columnDropdowns0, 2, 0, 1, 6)
         self.parent.addWidget(columnDropdowns1, 3, 0, 1, 6)
 
-        self.parent.addWidget(serialReader, 4, 0) # The SerialReader and SaveDataWriter both hide themselves, are only attached to be in the event loop
+        # self.parent.addWidget(serialReader, 4, 0) # The SerialReader and SaveDataWriter both hide themselves, are only attached to be in the event loop
         self.parent.addWidget(saveDataWriter, 4, 1)
 
         current.append([possPlotData[0], possPlotData[1]])
@@ -225,7 +268,7 @@ class XAxisResizer(QWidget):
 
         self.xAxisResizeButton = QPushButton("Resize")
         self.xAxisResizeButton.clicked.connect(self.resize)
-        self.xAxisResizeButton.setDisabled(True) # TODO: setEnabled vs. setDisabled why do I use both
+        #self.xAxisResizeButton.setDisabled(True) # TODO: setEnabled vs. setDisabled why do I use both
 
         self.layout.addWidget(self.xAxisLength)
         self.layout.addWidget(self.xAxisResizeButton)
@@ -238,7 +281,6 @@ class XAxisResizer(QWidget):
         for dataProcess in self.possPlotData:
             dataProcess[1].resizeXAxis(newLength)
         
-
 # Class containing all of the dropdown menues corrosponding to a certain PlotColumn
 class ColumnDropdowns(QWidget):
 
@@ -448,13 +490,16 @@ class CustomPlotWidget(PlotWidget):
         self.setBackground('w')
         self.dataProcess = dataProcess
 
-        self.refreshRate = 25 # How fast to redraw graph in milliseconds, currently not a parameter as will probably be same for every graph
+        self.refreshRate = 50 # How fast to redraw graph in milliseconds, currently not a parameter as will probably be same for every graph
 
         self.pen = mkPen(color=(0,0,0), width=3) # Sets color and size of line drawn on graph
 
         self.setMouseEnabled(x=False, y=False) # Removes ability to drag graph with mouse
 
-        x, y = self.dataProcess.getData()
+        with self.dataProcess.lock:
+                x = self.dataProcess.x[:]
+                y = self.dataProcess.y[:]
+        # x, y = self.dataProcess.getData()
 
         self.data_line = self.plot(x, y, pen=self.pen)
 
@@ -469,11 +514,31 @@ class CustomPlotWidget(PlotWidget):
     # Redraws plot with data recived from dataProcess
     def redrawPlot(self):
         if bool(self.running.value):
-            x, y = self.dataProcess.getData()
+            # x, y = self.dataProcess.getData()
+            with self.dataProcess.lock:
+                x = self.dataProcess.x[:]
+                y = self.dataProcess.y[:]
             self.data_line.setData(x, y)
 
 # Abstract class defining methods needed in all data processes, each distinct graph will have an implementation of this
 class DataProcess():
+
+    def __init__(self, running, channelData, x, y, xAxisLength, counter):
+
+        self.running = running
+        self.channelData = channelData
+        self.xAxisLength = xAxisLength
+        self.currPacket = -1
+        self.counter = counter # Starts at -1
+
+        # These must be multiprocessing sync manager arrays so the data can be shared back to the process drawing the graphs
+        self.x = x
+        self.x[:] = list(range(-xAxisLength.value, 0))
+        self.y = y
+        self.y[:] = [0] * xAxisLength.value
+        self.lock = mp.RLock()
+
+        self.refreshRate = 10
 
     # Starts a loop to call the updateData function 
     def startUpdateData(self):
@@ -483,153 +548,83 @@ class DataProcess():
                 self.updateData()
 
             # This sleep is just to cap the refresh rate to lower the load on the computer, really no need to go full speed
-            sleep(.01)
+            sleep(self.refreshRate*.001)
 
     # Recalculates the graphical data to return based on the raw input
     def updateData(self):
-        raise Exception("Child class must implement this method")
+        newX = self.counter.value + 1 # TODO: This should prob be updated to use the difference between the current and next packet ID
+        with self.channelData.get_lock():
+            packetId = self.channelData.packetId
+            newY = self.calculateY()
 
-    # Returns the data neeeded to redraw the graph
-    # This method will likely be the same for all children but isn't defined here so all variables remain in the child class
-    def getData(self):
-        # [:] needed to extract array from multiprocessing.Array
-        return self.x[:], self.y[:]
+        if self.currPacket != packetId:
+            # If the graph appears as if it is dropping packets you can in theory use a non-locked array to keep track of values
+            with self.lock:
+                self.x[:] = self.x[1:] + [newX] # FYI iterating through is super slow compared to this apperently
+                self.y[:] = self.y[1:] + [newY]
+                self.currPacket = packetId
+                self.counter.value = newX 
 
     def resizeXAxis(self, newXAxisLength):
+        currXAxisLength = self.xAxisLength.value
+        if newXAxisLength > currXAxisLength:
+            diff = newXAxisLength - currXAxisLength
+            currEnd = self.counter.value + 1 - currXAxisLength
 
-        if newXAxisLength > self.xAxisLength:
-            diff = newXAxisLength - self.xAxisLength
-            print(diff)
-            self.trueX = range(self.counter + 1, self.counter + diff + 1) + self.trueX
-            self.trueY = ([0] * diff) + self.trueY
-            # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
-            self.x = mp.Array('d', [0] * newXAxisLength)
-            self.y = mp.Array('d', [0] * newXAxisLength)
-
+            with self.lock:
+                self.x[:] = list(range(currEnd - diff, currEnd)) + self.x[:]
+                self.y[:] = ([0] * diff) + self.y[:]
 
 # Data process for a simple sine wave
 class EEGPlusEDODataProcess(DataProcess):
-    
-    def __init__(self, running, channelData, xAxisLength):
 
-        self.running = running
-        self.channelData = channelData
-        self.xAxisLength = xAxisLength
-        self.currPacket = -1
-        self.counter = -1 # Is there a better way to repsent the x axis?
+    def calculateY(self):
 
-        # These lists are used to keep track of the true value as the lock can sometimes prevent a write
-        self.trueX = list(range(-xAxisLength, 0))
-        self.trueY = [0] * xAxisLength
-        # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
-        self.x = mp.Array('d', list(range(-xAxisLength, 0))) # HERE: trying to understand we need to use mp arrays if we are just extracting the data anyway to fix resize issue
-        self.y = mp.Array('d', [0] * xAxisLength)        
-
-    def updateData(self):
-        newX = self.counter + 1 # TODO: This should prob be updated to use the difference between the current and next packet ID
-        with self.channelData.get_lock():
-            packetId = self.channelData.packetId
-            newY = self.channelData.chxEEG + self.channelData.chxEDO
-
-        if self.currPacket != packetId:
-            self.trueX = self.trueX[1:] + [newX]
-            self.trueY = self.trueY[1:] + [newY]
-            for i in range(len(self.x)):
-                self.x[i] = self.trueX[i]
-                self.y[i] = self.trueY[i]
-            self.currPacket = packetId
-            self.counter = newX 
+        return self.channelData.chxEEG + self.channelData.chxEDO
 
 # Data process for a simple sine wave
 class IQMagDataProcess(DataProcess):
-    
-    def __init__(self, running, channelData, xAxisLength):
 
-        self.running = running
-        self.channelData = channelData
-        self.xAxisLength = xAxisLength
-        self.currPacket = -1
-        self.counter = -1
-
-        # These lists are used to keep track of the true value as the lock can sometimes prevent a write
-        self.trueX = list(range(-xAxisLength, 0))
-        self.trueY = [0] * xAxisLength
-        # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
-        self.x = mp.Array('d', list(range(-xAxisLength, 0)))
-        self.y = mp.Array('d', [0] * xAxisLength)        
-
-    def updateData(self):
-        newX = self.counter + 1
-        with self.channelData.get_lock():
-            packetId = self.channelData.packetId
-            newY = math.sqrt(self.channelData.chxI^2 + self.channelData.chxQ^2)
-
-        if self.currPacket != packetId:
-            self.trueX = self.trueX[1:] + [newX]
-            self.trueY = self.trueY[1:] + [newY]
-            for i in range(len(self.x)):
-                self.x[i] = self.trueX[i]
-                self.y[i] = self.trueY[i]
-            self.currPacket = packetId
-            self.counter = newX 
+    def calculateY(self):
+        
+        return math.sqrt(self.channelData.chxI^2 + self.channelData.chxQ^2)
     
 # Data process for a simple sine wave
 class IQPhaseDataProcess(DataProcess):
-    
-    def __init__(self, running, channelData, xAxisLength):
 
-        self.running = running
-        self.channelData = channelData
-        self.xAxisLength = xAxisLength
-        self.currPacket = -1
-        self.counter = -1
+    def calculateY(self):
+        
+        return math.atan(self.channelData.chxQ / self.channelData.chxI)
 
-        # These lists are used to keep track of the true value as the lock can sometimes prevent a write
-        self.trueX = list(range(-xAxisLength, 0))
-        self.trueY = [0] * xAxisLength
-        # These must be multiprocessing arrays so the data can be shared back to the process drawing the graphs
-        self.x = mp.Array('d', list(range(-xAxisLength, 0)))
-        self.y = mp.Array('d', [0] * xAxisLength)        
+class SerialReader():
 
-    def updateData(self):
-        newX = self.counter + 1
-        with self.channelData.get_lock():
-            packetId = self.channelData.packetId
-            newY = math.atan(self.channelData.chxQ / self.channelData.chxI)
+    def __init__(self, port, channelDataArr, saveDataQueue, condition):
 
-        if self.currPacket != packetId:
-            self.trueX = self.trueX[1:] + [newX]
-            self.trueY = self.trueY[1:] + [newY]
-            for i in range(len(self.x)):
-                self.x[i] = self.trueX[i]
-                self.y[i] = self.trueY[i]
-            self.currPacket = packetId
-            self.counter = newX 
-
-class SerialReader(QWidget):
-
-    def __init__(self, port, channelDataArr, saveDataQueue):
-
-        super().__init__()
         self.serialGUISide = None
-        while not self.serialGUISide: # This waits for the client (currently the emulator) to create the port
-            try:
-                self.serialGUISide = serial.Serial(port, 9600, rtscts=True, dsrdtr=True)
-            except:
-                pass
+        self.port = port
         self.channelDataArr = channelDataArr
         self.saveDataQueue = saveDataQueue
+        self.condition = condition
 
-        self.refreshRate = 5
+        self.refreshRate = 10
 
-        self.hide()
-
+    # Starts a loop to call the startSerialReader function 
     def startSerialReader(self):
+        while not self.serialGUISide: # This waits for the client (currently the emulator) to create the port
+            try:
+                # Connection is in startSerialReader because otherwise it doesn't really work with the multiprocessing
+                self.serialGUISide = serial.Serial(self.port, 9600, rtscts=True, dsrdtr=True)
+            except:
+                pass
 
-        self.timer = QTimer()
-        self.timer.setInterval(self.refreshRate)
-        self.timer.timeout.connect(self.updateData)
-        self.timer.start()
+        with self.condition:
+            self.condition.notify_all() # Allows for continuing execution in the main thread
+
+        while True:
+            self.updateData()
+
+            # This sleep is just to cap the refresh rate to lower the load on the computer, really no need to go full speed
+            sleep(self.refreshRate*.001)
 
     def updateData(self):
         if self.serialGUISide.in_waiting > 0:
@@ -657,11 +652,11 @@ class SerialReader(QWidget):
                 idx += 1
 
                 saveData.extend((chxEEG, chxI, chxQ, chxEDO))
-
+            
             self.saveDataQueue.put(saveData) # We might want this to be put_nowait
 
 class ChannelData(Structure):
-    _fields_ = [("packetId", c_byte), ("chxEEG", c_int), ("chxI", c_short), ("chxQ", c_short), ("chxEDO", c_byte)]
+    _fields_ = [("packetId", c_ubyte), ("chxEEG", c_int), ("chxI", c_short), ("chxQ", c_short), ("chxEDO", c_byte)]
 
 class SaveDataMenuButton(QPushButton):
 
@@ -780,6 +775,9 @@ class SaveDataWriter(QWidget):
             self.updatedExtenstion = False
         elif (not self.updatedExtenstion or self.saveDataMenuButton.updatedFilename) and not bool(self.running.value):
             self.setCurrFilename()
+        # This clause works to empty the queue if the user hasn't yet clicked start
+        elif not bool(self.running.value) and not self.saveDataQueue.empty():
+            self.saveDataQueue.get()
 
     def setCurrFilename(self):
         idx = 0
