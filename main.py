@@ -19,7 +19,7 @@ from pyqtgraph import PlotWidget, plot, mkPen
 # Sometimes you have to click start twice the first time. Its something weird with pyqt so idk how to fix it.
 #
 # AttributeError: 'ForkAwareLocal' object has no attribute 'connection' appears to be something with the manager shutting down? Or maybe too many simultanious manager reads? 
-# I might have fixed it by including it in CustomGridLayout but then again it might still be broken. A rare error either way but problematic. TODO
+# A rare error but problematic. TODO
 ###
 class MainWindow(QMainWindow):
 
@@ -123,7 +123,7 @@ class CustomGridLayout(QGridLayout):
         self.parent = super()
         self.parent.__init__()
 
-        self.manager = manager # This might have fixed the "AttributeError: 'ForkAwareLocal' object has no attribute 'connection'" error but idk
+        self.manager = manager # This might have help the "AttributeError: 'ForkAwareLocal' object has no attribute 'connection'" error but idk
 
         current = [] # Universal 2d list of current plots being shown
 
@@ -574,6 +574,19 @@ class DataProcess():
             with self.lock:
                 self.x[:] = list(range(currEnd - diff, currEnd)) + self.x[:]
                 self.y[:] = ([0] * diff) + self.y[:]
+
+            with self.xAxisLength:
+                self.xAxisLength.value = newXAxisLength
+
+        elif newXAxisLength < currXAxisLength:
+            diff = currXAxisLength - newXAxisLength
+
+            with self.lock:
+                self.x[:] = self.x[diff:]
+                self.y[:] = self.y[diff:]
+
+            with self.xAxisLength:
+                self.xAxisLength.value = newXAxisLength
 
 # Data process for a simple sine wave
 class EEGPlusEDODataProcess(DataProcess):
