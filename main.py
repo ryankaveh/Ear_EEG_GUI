@@ -42,7 +42,8 @@ class MainWindow(QMainWindow):
         running = mp.Value('i', False) # Univerally controls whether the DataProcesses run and CustomGraphWidgets redraw themselves
 
         # Creates SerialReader object to read data from serial port "port", populate channelDataArr and save the data to saveDataQueue
-        port = "./ttyGUI"
+        # port = "./ttyGUI" # Emulator
+        port = "/dev/cu.usbmodem0000000000001"
 
         channelDataArr = []
         for i in range(0, numChannels):
@@ -51,15 +52,13 @@ class MainWindow(QMainWindow):
 
         saveDataQueue = self.manager.Queue()
 
-        condition = mp.Condition()
+        connectionPipe, sRConnectionPipe = mp.Pipe()
+        commandWriterPipe, sRCommandWriterPipe = mp.Pipe()
 
-        serialReader = SerialReader(port, channelDataArr, saveDataQueue, condition)
+        serialReader = SerialReader(port, channelDataArr, saveDataQueue, sRConnectionPipe, sRCommandWriterPipe)
         self.serialReaderProcess = mp.Process(target=serialReader.startSerialReader)
         self.serialReaderProcess.daemon = True
         self.serialReaderProcess.start()
-
-        with condition:
-            condition.wait() # Implies serial reader has connected
 
         xAxisLength = 100
 
@@ -101,7 +100,7 @@ class MainWindow(QMainWindow):
 
             possPlotData.append(("Ch " + str(i) + " phase(I&Q)", iQPhaseDataProcess))
 
-        layout = CustomGridLayout(running, possPlotData, serialReader, saveDataQueue, xAxisLength, self.manager)
+        layout = CustomGridLayout(running, possPlotData, serialReader, connectionPipe, commandWriterPipe, saveDataQueue, xAxisLength, self.manager)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
@@ -118,7 +117,7 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, running, possPlotData, serialReader, saveDataQueue, xAxisLength, manager):
+    def __init__(self, running, possPlotData, serialReader, connectionPipe, commandWriterPipe, saveDataQueue, xAxisLength, manager):
 
         self.parent = super()
         self.parent.__init__()
@@ -149,6 +148,27 @@ class CustomGridLayout(QGridLayout):
         plotColumn0 = PlotColumn([plot0, plot1], 0, maxNumPlots) # Creates a plot column from a list of plots, an index and the max number of plots
         plotColumn1 = PlotColumn([plot2, plot3], 1, maxNumPlots)
 
+        combindedPlotColumnLayout = QHBoxLayout()
+        combindedPlotColumnLayout.addWidget(plotColumn0)
+        combindedPlotColumnLayout.addWidget(plotColumn1)
+
+        saveDataMenuButton = SaveDataMenuButton(running)
+
+        saveDataWriter = SaveDataWriter(running, saveDataQueue, saveDataMenuButton)
+        saveDataWriter.startSaveDataWriter()
+
+        commandWriter =  CommandWriter(commandWriterPipe)
+
+        startStop = StartStop(running, connectionPipe, saveDataMenuButton, commandWriter)
+        cueSystemButton = CueSystemButton(running, startStop)
+
+        optionsRowLayout = QHBoxLayout()
+        optionsRowLayout.addWidget(saveDataMenuButton)
+        optionsRowLayout.addWidget(cueSystemButton)
+        optionsRowLayout.addWidget(startStop)
+        optionsRowLayout.addWidget(commandWriter)
+        optionsRowLayout.addWidget(XAxisResizer(possPlotData, xAxisLength))
+
         # Creates the starting dropdown menues
         d0 = QComboBox()
         d1 = QComboBox()
@@ -170,26 +190,13 @@ class CustomGridLayout(QGridLayout):
         columnDropdowns0 = ColumnDropdowns(running, [d0, d1], plotColumn0, possPlotData, lables, current, maxNumPlots)
         columnDropdowns1 = ColumnDropdowns(running, [d2, d3], plotColumn1, possPlotData, lables, current, maxNumPlots)
 
-        combindedPlotColumnLayout = QHBoxLayout()
-        combindedPlotColumnLayout.addWidget(plotColumn0)
-        combindedPlotColumnLayout.addWidget(plotColumn1)
+        columnDropdownsLayout = QVBoxLayout()
+        columnDropdownsLayout.addWidget(columnDropdowns0)
+        columnDropdownsLayout.addWidget(columnDropdowns1)
 
-        saveDataMenuButton = SaveDataMenuButton(running)
-
-        saveDataWriter = SaveDataWriter(running, saveDataQueue, saveDataMenuButton)
-        saveDataWriter.startSaveDataWriter()
-
-        startStop = StartStop(running, saveDataMenuButton)
-        cueSystemButton = CueSystemButton(running, startStop)
-
-        # Adds plots and dropdown menus in a grid format, will have to add other buttons to row 1 later (start/stop, etc.)
-        self.parent.addLayout(combindedPlotColumnLayout, 0, 0, 1, 6)
-        self.parent.addWidget(saveDataMenuButton, 1, 0)
-        self.parent.addWidget(cueSystemButton, 1, 1)
-        self.parent.addWidget(startStop, 1, 2)
-        self.parent.addWidget(XAxisResizer(possPlotData, xAxisLength), 1, 3)
-        self.parent.addWidget(columnDropdowns0, 2, 0, 1, 6)
-        self.parent.addWidget(columnDropdowns1, 3, 0, 1, 6)
+        self.parent.addLayout(combindedPlotColumnLayout, 0, 0)
+        self.parent.addLayout(optionsRowLayout, 1, 0)
+        self.parent.addLayout(columnDropdownsLayout, 2, 0)
 
         # self.parent.addWidget(serialReader, 4, 0) # The SerialReader and SaveDataWriter both hide themselves, are only attached to be in the event loop
         self.parent.addWidget(saveDataWriter, 4, 1)
@@ -200,21 +207,30 @@ class CustomGridLayout(QGridLayout):
         
 class StartStop(QWidget):
 
-    def __init__(self, running, saveDataMenuButton):
+    def __init__(self, running, connectionPipe, saveDataMenuButton, commandWriter):
 
         super().__init__()
 
         self.running = running
+        self.connectionPipe = connectionPipe
         self.saveDataMenuButton = saveDataMenuButton
+        self.commandWriter = commandWriter
         self.layout = QHBoxLayout()
+
+        self.connectButton = QPushButton("Connect")
+        self.connectButton.clicked.connect(self.connect)
 
         self.startButton = QPushButton("Start")
         self.startButton.clicked.connect(self.start)
+        self.startButton.setDisabled(True)
+        self.startButton.hide()
 
         self.stopButton = QPushButton("Stop")
         self.stopButton.clicked.connect(self.stop)
         self.stopButton.setDisabled(True)
+        self.stopButton.hide()
 
+        self.layout.addWidget(self.connectButton, 1)
         self.layout.addWidget(self.startButton, 1)
         self.layout.addWidget(self.stopButton, 1)
 
@@ -222,6 +238,7 @@ class StartStop(QWidget):
 
         self.cueSystem = None
         self.synced = None
+        self.connected = False
     
     def start(self):
 
@@ -247,10 +264,54 @@ class StartStop(QWidget):
         if self.synced:
             self.cueSystem.stopTest()
 
-    def setCueSync(self, cueSystem, syncState):
+    def connect(self):
 
-        self.cueSystem = cueSystem
+        if self.connectionPipe.poll():
+            self.connected = True
+            self.connectButton.hide()
+            self.startButton.setDisabled(False)
+            self.startButton.show()
+            self.stopButton.show()
+            self.commandWriter.enable()
+            print("Connection Success")
+        else:
+            print("No Device Found")
+
+    def setCueSync(self, cueSystem, syncState):
+        if syncState and (not self.connected): # Cannot sync start/stop before connection is made
+            return False # Failure
         self.synced = syncState
+        self.cueSystem = cueSystem
+        return True # Success
+
+class CommandWriter(QWidget):
+
+    def __init__(self, commandWriterPipe):
+
+        super().__init__()
+
+        self.commandWriterPipe = commandWriterPipe
+
+        self.layout = QHBoxLayout()
+
+        self.commandInput = QLineEdit()
+        self.commandInputButton = QPushButton("Send Command")
+        self.commandInputButton.clicked.connect(self.sendCommand)
+        self.commandInputButton.setDisabled(True)
+
+        self.layout.addWidget(self.commandInput)
+        self.layout.addWidget(self.commandInputButton)
+
+        self.setLayout(self.layout)
+
+    def enable(self):
+
+        self.commandInputButton.setDisabled(False)
+
+    def sendCommand(self):
+
+        self.commandWriterPipe.send(self.commandInput.text())
+        self.commandInput.clear()
 
 class XAxisResizer(QWidget):
 
@@ -611,62 +672,81 @@ class IQPhaseDataProcess(DataProcess):
 
 class SerialReader():
 
-    def __init__(self, port, channelDataArr, saveDataQueue, condition):
+    def __init__(self, port, channelDataArr, saveDataQueue, connectionPipe, commandWriterPipe):
 
         self.serialGUISide = None
         self.port = port
         self.channelDataArr = channelDataArr
         self.saveDataQueue = saveDataQueue
-        self.condition = condition
+        self.connectionPipe = connectionPipe
+        self.commandWriterPipe = commandWriterPipe
 
         self.refreshRate = 10
 
     # Starts a loop to call the startSerialReader function 
     def startSerialReader(self):
+
         while not self.serialGUISide: # This waits for the client (currently the emulator) to create the port
             try:
                 # Connection is in startSerialReader because otherwise it doesn't really work with the multiprocessing
-                self.serialGUISide = serial.Serial(self.port, 9600, rtscts=True, dsrdtr=True)
+                # self.serialGUISide = serial.Serial(self.port, 9600, rtscts=True, dsrdtr=True) # Uncomment for emulator
+                self.serialGUISide = serial.Serial(self.port, 115200, rtscts=True, dsrdtr=True)
             except:
                 pass
 
-        with self.condition:
-            self.condition.notify_all() # Allows for continuing execution in the main thread
+        self.connectionPipe.send(1) # Callback to notify main loop that device is connected
 
         while True:
             self.updateData()
-
+            if self.commandWriterPipe.poll():
+                command = self.commandWriterPipe.recv() 
+                print("Writing " + command + " to chip")
+                self.serialGUISide.write((command + " \n").encode())
             # This sleep is just to cap the refresh rate to lower the load on the computer, really no need to go full speed
             sleep(self.refreshRate*.001)
 
     def updateData(self):
+        
         if self.serialGUISide.in_waiting > 0:
             val = b''
-            for i in range(65):
-                val += self.serialGUISide.read()
+            val += self.serialGUISide.read()
 
-            packetId = int.from_bytes(val[:1], 'big')
-            
-            saveData = [packetId]
+            if val.decode() == "\r":
+                sleep(1)
+                self.serialGUISide.reset_input_buffer() # Currently throws away text responses as they aren't consistent enought to deal with
+                # while True:
+                #     print(val)
+                #     val += self.serialGUISide.read()
+                #     if val.decode()[-1] == ".":
+                #         print("Chip response: " + val.decode())
+                #         return
+            else:
+                for i in range(64): # Signal is of exactly length 65
+                    val += self.serialGUISide.read()
 
-            idx = 0
-            for i in range(1, len(val) - 1, 8): # If the number of channels is not 8 this will fail to due to channelDataArr being the wrong size
-                chxEEG = int.from_bytes(val[i:i+3], 'big', signed=True)
-                chxI = int.from_bytes(val[i+3:i+5], 'big', signed=True)
-                chxQ = int.from_bytes(val[i+5:i+7], 'big', signed=True)
-                chxEDO = int.from_bytes(val[i+7:i+8], 'big', signed=True)
+                packetId = int.from_bytes(val[:1], 'big')
+                
+                saveData = [packetId]
 
-                with self.channelDataArr[idx].get_lock():
-                    self.channelDataArr[idx].chxEEG = chxEEG
-                    self.channelDataArr[idx].chxI = chxI
-                    self.channelDataArr[idx].chxQ = chxQ
-                    self.channelDataArr[idx].chxEDO = chxEDO
-                    self.channelDataArr[idx].packetId = packetId
-                idx += 1
+                idx = 0
+                for i in range(1, len(val) - 1, 8): # If the number of channels is not 8 this will fail to due to channelDataArr being the wrong size
+                    chxEEG = int.from_bytes(val[i:i+3], 'big', signed=True)
+                    chxI = int.from_bytes(val[i+3:i+5], 'big', signed=True)
+                    chxQ = int.from_bytes(val[i+5:i+7], 'big', signed=True)
+                    chxEDO = int.from_bytes(val[i+7:i+8], 'big', signed=True)
 
-                saveData.extend((chxEEG, chxI, chxQ, chxEDO))
-            
-            self.saveDataQueue.put(saveData) # We might want this to be put_nowait
+                    with self.channelDataArr[idx].get_lock():
+                        self.channelDataArr[idx].chxEEG = chxEEG
+                        self.channelDataArr[idx].chxI = chxI
+                        self.channelDataArr[idx].chxQ = chxQ
+                        self.channelDataArr[idx].chxEDO = chxEDO
+                        self.channelDataArr[idx].packetId = packetId
+                    idx += 1
+
+                    saveData.extend((chxEEG, chxI, chxQ, chxEDO))
+                
+                
+                self.saveDataQueue.put(saveData) # We might want this to be put_nowait
 
 class ChannelData(Structure):
     _fields_ = [("packetId", c_ubyte), ("chxEEG", c_int), ("chxI", c_short), ("chxQ", c_short), ("chxEDO", c_byte)]
@@ -675,7 +755,7 @@ class SaveDataMenuButton(QPushButton):
 
     def __init__(self, running):
 
-        super().__init__("Save Data Menu")
+        super().__init__("Save Data")
         self.clicked.connect(self.showPopup)
 
         self.running = running
@@ -881,7 +961,9 @@ class CueSystem(QWidget):
         self.startStopSync.stateChanged.connect(self.syncStateChange)
         if self.running.value:
             self.startStopSync.setEnabled(False)
-        self.startStop.setCueSync(self, False)
+        # SetCueSync will always succeed as sync starts false, sync can't be true until connection is successful
+        # Thus value should not be intialized to true (and will fail if it is)
+        self.startStop.setCueSync(self, False) 
         startStopSyncLayout = QHBoxLayout()
         startStopSyncLayout.addWidget(startStopSyncLabel)
         startStopSyncLayout.addWidget(self.startStopSync)
@@ -933,8 +1015,9 @@ class CueSystem(QWidget):
         self.splitWindowButton.show()
 
     def syncStateChange(self, state):
-
-            self.startStop.setCueSync(self, state)
+        if not self.startStop.setCueSync(self, state): # Print and revert on failure
+            print("Cannot sync until connection is made")
+            self.startStopSync.setCheckState(0) # Uncheck box
 
     def changeTest(self, idx):
 
@@ -1139,7 +1222,7 @@ class CueSystem(QWidget):
 
             clicks = (np.zeros(numSamples) + (np.arange(numSamples) % periodLen < pulseWidth)).astype(np.float32)
             numPeriods = int((length * samplingFreq)/numSamples)
-            fullSound = np.tile(clicks, numPeriods)
+            fullClicks = np.tile(clicks, numPeriods)
 
             # Start playback
             sa.play_buffer(fullClicks, 1, 4, samplingFreq)
@@ -1148,7 +1231,7 @@ class CueSystem(QWidget):
             inital = np.linspace(0, length, length * samplingFreq)
             amPiece = np.cos(2 * np.pi * self.amFreq * inital)
             carrierPiece = np.cos(2 * np.pi * self.carrierFreq * inital)
-            fullSound = (self.carrierAmp + self.modAmp * amPiece * carrierPiece).astype(np.float32) # TODO: is this equation correct?
+            fullTone = (self.carrierAmp + self.modAmp * amPiece * carrierPiece).astype(np.float32) # TODO: is this equation correct?
 
             # Start playback
             sa.play_buffer(fullTone, 1, 4, samplingFreq)
