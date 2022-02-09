@@ -1,25 +1,29 @@
-import os, sys, serial, struct, math, atexit
+import os, sys, serial, math, atexit
 import numpy as np
 import multiprocessing as mp
 import simpleaudio as sa
-import sounddevice as sd
 from time import sleep, time
-from queue import Queue
 from csv import writer
-from random import randint
 from ctypes import Structure, c_ubyte, c_byte, c_short, c_int
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton, QCheckBox, QLineEdit, QFrame
-from PyQt5.QtGui import QPalette, QColor, QRegExpValidator
-from PyQt5.QtCore import Qt, QTimer, QProcess, QObject, QRegExp
-from pyqtgraph import PlotWidget, plot, mkPen
+from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QGridLayout, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton, QCheckBox, QLineEdit, QFrame, QScrollArea
+from PyQt5.QtGui import QRegExpValidator
+from PyQt5.QtCore import QTimer, QRegExp
+from pyqtgraph import PlotWidget, mkPen
 
 ###
 # Known Issues:
 #
 # Sometimes you have to click start twice the first time. Its something weird with pyqt so idk how to fix it.
 #
-# AttributeError: 'ForkAwareLocal' object has no attribute 'connection' appears to be something with the manager shutting down? Or maybe too many simultanious manager reads? 
+# AttributeError: 'ForkAwareLocal' object has no attribute 'connection' appears to be something with the sync manager shutting down? Or maybe too many simultaneous manager reads? 
 # A rare error but problematic. TODO
+# 
+# Device dropdown
+# Clean Code
+#   self.layout should be just layout unless needed later
+#   Set qwidget/qlayout parent
+# Connection dropdown
+# Split mac/windows
 ###
 class MainWindow(QMainWindow):
 
@@ -34,8 +38,6 @@ class MainWindow(QMainWindow):
         # List of all DataProcesses that can become graphs (and then be shown) during runtime
         # First item in the tuple is supposed to be the name of the graph, is currently just its color
         possPlotData = []
-
-        # colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w'] # Background colors of the graphs, currently used as otherwise all graphs would look identical
 
         self.manager = mp.Manager()
 
@@ -54,8 +56,9 @@ class MainWindow(QMainWindow):
 
         connectionPipe, sRConnectionPipe = mp.Pipe()
         commandWriterPipe, sRCommandWriterPipe = mp.Pipe()
+        commandResponsePipe, sRCommandResponsePipe = mp.Pipe()
 
-        serialReader = SerialReader(port, channelDataArr, saveDataQueue, sRConnectionPipe, sRCommandWriterPipe)
+        serialReader = SerialReader(port, channelDataArr, saveDataQueue, sRConnectionPipe, sRCommandWriterPipe, commandResponsePipe)
         self.serialReaderProcess = mp.Process(target=serialReader.startSerialReader)
         self.serialReaderProcess.daemon = True
         self.serialReaderProcess.start()
@@ -100,7 +103,7 @@ class MainWindow(QMainWindow):
 
             possPlotData.append(("Ch " + str(i) + " phase(I&Q)", iQPhaseDataProcess))
 
-        layout = CustomGridLayout(running, possPlotData, serialReader, connectionPipe, commandWriterPipe, saveDataQueue, xAxisLength, self.manager)
+        layout = CustomGridLayout(running, possPlotData, serialReader, connectionPipe, commandWriterPipe, sRCommandResponsePipe, saveDataQueue, xAxisLength, self.manager)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
@@ -117,7 +120,7 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, running, possPlotData, serialReader, connectionPipe, commandWriterPipe, saveDataQueue, xAxisLength, manager):
+    def __init__(self, running, possPlotData, serialReader, connectionPipe, commandWriterPipe, sRCommandResponsePipe, saveDataQueue, xAxisLength, manager):
 
         self.parent = super()
         self.parent.__init__()
@@ -157,16 +160,16 @@ class CustomGridLayout(QGridLayout):
         saveDataWriter = SaveDataWriter(running, saveDataQueue, saveDataMenuButton)
         saveDataWriter.startSaveDataWriter()
 
-        commandWriter =  CommandWriter(commandWriterPipe)
+        chatWindow = ChatWindow(commandWriterPipe, sRCommandResponsePipe)
+        chatWindow.startUpdate()
 
-        startStop = StartStop(running, connectionPipe, saveDataMenuButton, commandWriter)
+        startStop = StartStop(running, connectionPipe, saveDataMenuButton, chatWindow)
         cueSystemButton = CueSystemButton(running, startStop)
 
         optionsRowLayout = QHBoxLayout()
         optionsRowLayout.addWidget(saveDataMenuButton)
         optionsRowLayout.addWidget(cueSystemButton)
         optionsRowLayout.addWidget(startStop)
-        optionsRowLayout.addWidget(commandWriter)
         optionsRowLayout.addWidget(XAxisResizer(possPlotData, xAxisLength))
 
         # Creates the starting dropdown menues
@@ -194,9 +197,16 @@ class CustomGridLayout(QGridLayout):
         columnDropdownsLayout.addWidget(columnDropdowns0)
         columnDropdownsLayout.addWidget(columnDropdowns1)
 
+        optionsLayout = QVBoxLayout()
+        optionsLayout.addLayout(optionsRowLayout)
+        optionsLayout.addLayout(columnDropdownsLayout)
+
+        optionsChatLayout = QHBoxLayout()
+        optionsChatLayout.addLayout(optionsLayout, 3) # The second param on this line/next line is the stretch. Thus 3/1 gives 75% of the space to the options and 25% to chat
+        optionsChatLayout.addWidget(chatWindow, 1)
+
         self.parent.addLayout(combindedPlotColumnLayout, 0, 0)
-        self.parent.addLayout(optionsRowLayout, 1, 0)
-        self.parent.addLayout(columnDropdownsLayout, 2, 0)
+        self.parent.addLayout(optionsChatLayout, 1, 0)
 
         # self.parent.addWidget(serialReader, 4, 0) # The SerialReader and SaveDataWriter both hide themselves, are only attached to be in the event loop
         self.parent.addWidget(saveDataWriter, 4, 1)
@@ -207,14 +217,14 @@ class CustomGridLayout(QGridLayout):
         
 class StartStop(QWidget):
 
-    def __init__(self, running, connectionPipe, saveDataMenuButton, commandWriter):
+    def __init__(self, running, connectionPipe, saveDataMenuButton, chatWindow):
 
         super().__init__()
 
         self.running = running
         self.connectionPipe = connectionPipe
         self.saveDataMenuButton = saveDataMenuButton
-        self.commandWriter = commandWriter
+        self.chatWindow = chatWindow
         self.layout = QHBoxLayout()
 
         self.connectButton = QPushButton("Connect")
@@ -242,6 +252,8 @@ class StartStop(QWidget):
     
     def start(self):
 
+        self.chatWindow.commandWriter.sendStreamCommand()
+
         self.running.value = True
         self.saveDataMenuButton.setChangeable(False)
         self.startButton.setDisabled(True)
@@ -251,6 +263,8 @@ class StartStop(QWidget):
             self.cueSystem.startStopSync.setDisabled(True)
         if self.synced:
             self.cueSystem.runTest()
+
+        self.chatWindow.addMessage("Streaming Started")
 
     def stop(self):
 
@@ -264,6 +278,10 @@ class StartStop(QWidget):
         if self.synced:
             self.cueSystem.stopTest()
 
+        self.chatWindow.commandWriter.sendStreamCommand()
+
+        self.chatWindow.addMessage("Streaming Stopped")
+
     def connect(self):
 
         if self.connectionPipe.poll():
@@ -272,9 +290,11 @@ class StartStop(QWidget):
             self.startButton.setDisabled(False)
             self.startButton.show()
             self.stopButton.show()
-            self.commandWriter.enable()
+            self.chatWindow.commandWriter.enable()
+            self.chatWindow.addMessage("Connection Success")
             print("Connection Success")
         else:
+            self.chatWindow.addMessage("No Device Found")
             print("No Device Found")
 
     def setCueSync(self, cueSystem, syncState):
@@ -284,34 +304,95 @@ class StartStop(QWidget):
         self.cueSystem = cueSystem
         return True # Success
 
-class CommandWriter(QWidget):
+class ChatWindow(QWidget):
 
-    def __init__(self, commandWriterPipe):
+    def __init__(self, commandWriterPipe, sRCommandResponsePipe):
 
         super().__init__()
 
+        self.sRCommandResponsePipe = sRCommandResponsePipe
+
+        self.refreshRate = 200 # Chat will update every 200 ms
+
+        self.layout = QVBoxLayout()
+        self.scrollArea = QScrollArea() # Will make it so the messages are scrollable
+        self.scrollArea.setWidgetResizable(True)
+        self.layout.addWidget(self.scrollArea)
+        
+        messageBox = QWidget(self.scrollArea)
+        self.scrollArea.setWidget(messageBox)
+        self.scrollArea.verticalScrollBar().rangeChanged.connect(self.scrollToBottom)
+        messageBoxLayout = QVBoxLayout()
+
+        self.messages = QLabel("GUI Intialized")
+        self.messages.setWordWrap(True)
+        messageBoxLayout.addWidget(self.messages)
+        messageBox.setLayout(messageBoxLayout)
+
+        self.commandWriter = CommandWriter(commandWriterPipe, self)
+        self.layout.addWidget(self.commandWriter)
+
+        self.setLayout(self.layout)
+
+    def startUpdate(self):
+
+        self.timer = QTimer()
+        self.timer.setInterval(self.refreshRate)
+        self.timer.timeout.connect(self.updateChat)
+        self.timer.start()
+
+    def updateChat(self):
+
+        if self.sRCommandResponsePipe.poll():
+            response = self.sRCommandResponsePipe.recv()
+            self.addMessage(str(response))
+
+    def addMessage(self, newText):
+
+        self.messages.setText(self.messages.text() + "\n" + newText)
+
+    def scrollToBottom(self):
+
+        scrollBar = self.scrollArea.verticalScrollBar()
+        scrollBar.setSliderPosition(scrollBar.maximum())
+
+class CommandWriter(QWidget):
+
+    def __init__(self, commandWriterPipe, chatWindow):
+
+        super().__init__()
+
+        self.enabled = False
+
         self.commandWriterPipe = commandWriterPipe
+        self.chatWindow = chatWindow
 
         self.layout = QHBoxLayout()
 
         self.commandInput = QLineEdit()
-        self.commandInputButton = QPushButton("Send Command")
-        self.commandInputButton.clicked.connect(self.sendCommand)
-        self.commandInputButton.setDisabled(True)
+        self.commandInput.returnPressed.connect(self.sendCommand)
 
         self.layout.addWidget(self.commandInput)
-        self.layout.addWidget(self.commandInputButton)
 
         self.setLayout(self.layout)
 
     def enable(self):
 
-        self.commandInputButton.setDisabled(False)
+        self.enabled = True
 
     def sendCommand(self):
 
-        self.commandWriterPipe.send(self.commandInput.text())
-        self.commandInput.clear()
+        if self.enabled:
+            text = self.commandInput.text()
+            self.commandWriterPipe.send(text)
+            self.chatWindow.addMessage("User: " + text)
+            self.commandInput.clear()
+        else:
+            self.chatWindow.addMessage("Please Connect to a Device First")
+        
+    def sendStreamCommand(self):
+
+        self.commandWriterPipe.send("stream")
 
 class XAxisResizer(QWidget):
 
@@ -667,12 +748,13 @@ class IQMagDataProcess(DataProcess):
 class IQPhaseDataProcess(DataProcess):
 
     def calculateY(self):
-        
+        if self.channelData.chxI == 0: # Is this the appropriate response (sometimes a zero appears not from the chip but on startup) TODO
+            return 0
         return math.atan(self.channelData.chxQ / self.channelData.chxI)
 
 class SerialReader():
 
-    def __init__(self, port, channelDataArr, saveDataQueue, connectionPipe, commandWriterPipe):
+    def __init__(self, port, channelDataArr, saveDataQueue, connectionPipe, commandWriterPipe, commandResponsePipe):
 
         self.serialGUISide = None
         self.port = port
@@ -680,8 +762,10 @@ class SerialReader():
         self.saveDataQueue = saveDataQueue
         self.connectionPipe = connectionPipe
         self.commandWriterPipe = commandWriterPipe
+        self.commandResponsePipe = commandResponsePipe
 
         self.refreshRate = 10
+        self.commandMode = True # Controls whether serialReader is looking for data or command responses, always starts in command mode
 
     # Starts a loop to call the startSerialReader function 
     def startSerialReader(self):
@@ -699,9 +783,13 @@ class SerialReader():
         while True:
             self.updateData()
             if self.commandWriterPipe.poll():
-                command = self.commandWriterPipe.recv() 
+                command = self.commandWriterPipe.recv().strip()
                 print("Writing " + command + " to chip")
                 self.serialGUISide.write((command + " \n").encode())
+                if command == "stream": # Stream is sent on both start and stop
+                    self.commandMode = not self.commandMode
+                    sleep(0.1)
+                    self.serialGUISide.reset_input_buffer() # Resets the buffer on both start and stop
             # This sleep is just to cap the refresh rate to lower the load on the computer, really no need to go full speed
             sleep(self.refreshRate*.001)
 
@@ -711,29 +799,27 @@ class SerialReader():
             val = b''
             val += self.serialGUISide.read()
 
-            if val.decode() == "\r":
-                sleep(1)
-                self.serialGUISide.reset_input_buffer() # Currently throws away text responses as they aren't consistent enought to deal with
-                # while True:
-                #     print(val)
-                #     val += self.serialGUISide.read()
-                #     if val.decode()[-1] == ".":
-                #         print("Chip response: " + val.decode())
-                #         return
+            if self.commandMode:
+                sleep(0.1) # Make sure full response is transmitted
+                while self.serialGUISide.in_waiting > 0:
+                    val += self.serialGUISide.read()
+                print("Chip response: " + val.decode())
+                self.commandResponsePipe.send("Chip: " + val.decode())
+                # self.serialGUISide.reset_input_buffer() # Currently throws away text responses as they aren't consistent enought to deal with
             else:
                 for i in range(64): # Signal is of exactly length 65
                     val += self.serialGUISide.read()
 
-                packetId = int.from_bytes(val[:1], 'big')
+                packetId = int.from_bytes(val[:1], "big")
                 
                 saveData = [packetId]
 
                 idx = 0
                 for i in range(1, len(val) - 1, 8): # If the number of channels is not 8 this will fail to due to channelDataArr being the wrong size
-                    chxEEG = int.from_bytes(val[i:i+3], 'big', signed=True)
-                    chxI = int.from_bytes(val[i+3:i+5], 'big', signed=True)
-                    chxQ = int.from_bytes(val[i+5:i+7], 'big', signed=True)
-                    chxEDO = int.from_bytes(val[i+7:i+8], 'big', signed=True)
+                    chxEEG = int.from_bytes(val[i:i+3], "big", signed=True)
+                    chxI = int.from_bytes(val[i+3:i+5], "big", signed=True)
+                    chxQ = int.from_bytes(val[i+5:i+7], "big", signed=True)
+                    chxEDO = int.from_bytes(val[i+7:i+8], "big", signed=True)
 
                     with self.channelDataArr[idx].get_lock():
                         self.channelDataArr[idx].chxEEG = chxEEG
