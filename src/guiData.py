@@ -7,17 +7,18 @@ from PyQt5.QtCore import QTimer
 
 class SerialReader():
 
-    def __init__(self, port, channelDataArr, saveDataQueue, connectionPipe, commandWriterPipe, commandResponsePipe):
+    def __init__(self, port, numChannels, channelDataArr, saveDataQueue, connectionPipe, commandWriterPipe, commandResponsePipe):
 
         self.serialGUISide = None
         self.port = port
+        self.numChannels = numChannels
         self.channelDataArr = channelDataArr
         self.saveDataQueue = saveDataQueue
         self.connectionPipe = connectionPipe
         self.commandWriterPipe = commandWriterPipe
         self.commandResponsePipe = commandResponsePipe
 
-        self.refreshRate = 10
+        self.refreshRate = 1 # Refresh rate in ms
         self.commandMode = True # Controls whether serialReader is looking for data or command responses, always starts in command mode
 
     # Starts a loop to call the startSerialReader function 
@@ -44,23 +45,24 @@ class SerialReader():
                     sleep(0.1)
                     self.serialGUISide.reset_input_buffer() # Resets the buffer on both start and stop
             # This sleep is just to cap the refresh rate to lower the load on the computer, really no need to go full speed
-            sleep(self.refreshRate*.001)
+            sleep(self.refreshRate*0.001)
 
     def updateData(self):
-        
+
         if self.serialGUISide.in_waiting > 0:
             val = b''
-            val += self.serialGUISide.read()
 
             if self.commandMode:
                 sleep(0.1) # Make sure full response is transmitted
                 while self.serialGUISide.in_waiting > 0:
                     val += self.serialGUISide.read()
-                print("Chip response: " + val.decode())
-                self.commandResponsePipe.send("Chip: " + val.decode())
+                # print("Chip response: " + val.decode())
+                print("Chip response: " + str(val.hex()))
+                # self.commandResponsePipe.send("Chip: " + val.decode())
+                self.commandResponsePipe.send("Chip: " + str(val.hex()))
                 # self.serialGUISide.reset_input_buffer() # Currently throws away text responses as they aren't consistent enought to deal with
             else:
-                for i in range(64): # Signal is of exactly length 65
+                for i in range(65): # Signal is of exactly length 65
                     val += self.serialGUISide.read()
 
                 packetId = int.from_bytes(val[:1], "big")
@@ -68,7 +70,7 @@ class SerialReader():
                 saveData = [packetId]
 
                 idx = 0
-                for i in range(1, len(val) - 1, 8): # If the number of channels is not 8 this will fail to due to channelDataArr being the wrong size
+                for i in range(1, len(val) - 1, self.numChannels):
                     chxEEG = int.from_bytes(val[i:i+3], "big", signed=True)
                     chxI = int.from_bytes(val[i+3:i+5], "big", signed=True)
                     chxQ = int.from_bytes(val[i+5:i+7], "big", signed=True)
@@ -83,7 +85,6 @@ class SerialReader():
                     idx += 1
 
                     saveData.extend((chxEEG, chxI, chxQ, chxEDO))
-                
                 
                 self.saveDataQueue.put(saveData) # We might want this to be put_nowait
 
@@ -172,11 +173,12 @@ class SaveDataMenu(QWidget):
 
 class SaveDataWriter(QWidget):
 
-    def __init__(self, running, saveDataQueue, saveDataMenuButton):
+    def __init__(self, running, numChannels, saveDataQueue, saveDataMenuButton):
 
         super().__init__()
 
-        self.header = ["packet_id", "chx1_eeg", "chx1_i", "chx1_q", "chx1_edo", "chx2_eeg", "chx2_i", "chx2_q", "chx2_edo", "chx3_eeg", "chx3_i", "chx3_q", "chx3_edo", "chx4_eeg", "chx4_i", "chx4_q", "chx4_edo", "chx5_eeg", "chx5_i", "chx5_q", "chx5_edo", "chx6_eeg", "chx6_i", "chx6_q", "chx6_edo", "chx7_eeg", "chx7_i", "chx7_q", "chx7_edo", "chx8_eeg", "chx8_i", "chx8_q", "chx8_edo"]
+        # Header format: ["packet_id", "chx1_eeg", "chx1_i", "chx1_q", "chx1_edo", "chx2_eeg", "chx2_i", "chx2_q", "chx2_edo", ...]
+        self.header = ["packet_id"] + [itm for lst in [[chxNum + "_eeg", chxNum + "_i", chxNum + "_q", chxNum + "_edo"] for chxNum in ["chx" + str(i) for i in range(1,numChannels + 1)]] for itm in lst]
 
         self.running = running
         self.saveDataQueue = saveDataQueue

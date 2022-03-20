@@ -15,7 +15,7 @@ import guiPlots
 #
 # AttributeError: 'ForkAwareLocal' object has no attribute 'connection' appears to be something with the sync manager shutting down? Or maybe too many simultaneous manager reads? 
 # A rare error but problematic. 
-# UPDATE: Hasn't shown up in a very long time, other changes possibly resolved this
+# Maybe something to do when packet ids are the same, error creating same packet id triggers this on some processes (not all) every time
 # 
 # Clean Code
 #   Set qwidget/qlayout parent
@@ -36,6 +36,8 @@ class MainWindow(QMainWindow):
         vid = 0x1915 # Nordic device vendor id, used for auto connect, change if desired connectionb device changes
         pid = 0x521A # Corrosponding product id, use same as vendor id
         configFilename = "guiConfig.csv"
+        startupCommandsFilename = "startupCommands.txt"
+        regDumpFilename = "regDump.txt"
 
         # List of all DataProcesses that can become graphs (and then be shown) during runtime
         # First item in the tuple is supposed to be the name of the graph, is currently just its color
@@ -73,7 +75,7 @@ class MainWindow(QMainWindow):
         commandWriterPipe, sRCommandWriterPipe = mp.Pipe()
         commandResponsePipe, sRCommandResponsePipe = mp.Pipe()
 
-        serialReader = guiData.SerialReader(port, channelDataArr, saveDataQueue, sRConnectionPipe, sRCommandWriterPipe, commandResponsePipe)
+        serialReader = guiData.SerialReader(port, numChannels, channelDataArr, saveDataQueue, sRConnectionPipe, sRCommandWriterPipe, commandResponsePipe)
         self.serialReaderProcess = mp.Process(target=serialReader.startSerialReader)
         self.serialReaderProcess.daemon = True
         self.serialReaderProcess.start()
@@ -120,21 +122,21 @@ class MainWindow(QMainWindow):
 
         plotLayout = []
         if os.path.exists(configFilename):
-            print("Loading config")
+            print("Loading Config")
             with open(configFilename, 'r') as config:
                 configReader = reader(config) # CSV reader
                 for plotCol in configReader:
                     plotLayout.append([int(plotNum) for plotNum in plotCol]) # Converts to ints from strings and adds the row to the layout
 
         if (not os.path.exists(configFilename)) or (not len(plotLayout) == 2): # There are two columns, this needs to be changed if the number of columns changes
-            print("Config missing or broken, regenerating")
+            print("Config Missing or Broken, Regenerating")
             plotLayout = [[0,1],[2,3]]
             with open(configFilename, 'w') as config:
                 configWriter = writer(config) # CSV writer
                 configWriter.writerows(plotLayout)
 
 
-        layout = CustomGridLayout(running, possPlotData, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, sRCommandResponsePipe, saveDataQueue, xAxisLength, self.manager)
+        layout = CustomGridLayout(running, numChannels, possPlotData, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename, self.manager)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
@@ -151,7 +153,7 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, running, possPlotData, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, sRCommandResponsePipe, saveDataQueue, xAxisLength, manager):
+    def __init__(self, running, numChannels, possPlotData, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename, manager):
 
         self.parent = super()
         self.parent.__init__()
@@ -208,13 +210,15 @@ class CustomGridLayout(QGridLayout):
 
         saveDataMenuButton = guiData.SaveDataMenuButton(running)
 
-        saveDataWriter = guiData.SaveDataWriter(running, saveDataQueue, saveDataMenuButton)
+        saveDataWriter = guiData.SaveDataWriter(running, numChannels, saveDataQueue, saveDataMenuButton)
         saveDataWriter.startSaveDataWriter()
 
-        chatWindow = guiOptions.ChatWindow(commandWriterPipe, sRCommandResponsePipe)
+        chatWindow = guiOptions.ChatWindow(commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe)
         chatWindow.startUpdate()
 
-        startStop = guiOptions.StartStop(running, connectionPipe, saveDataMenuButton, chatWindow)
+        regDump = guiOptions.RegDump(regDumpFilename, chatWindow)
+
+        startStop = guiOptions.StartStop(running, connectionPipe, saveDataMenuButton, chatWindow, regDump)
         cueSystemButton = guiCue.CueSystemButton(running, startStop)
 
         xAxisResizer = guiOptions.XAxisResizer(possPlotData, xAxisLength)
@@ -227,6 +231,7 @@ class CustomGridLayout(QGridLayout):
         optionsRowLayout.addWidget(startStop)
         optionsRowLayout.addWidget(xAxisResizer)
         optionsRowLayout.addWidget(layoutSaver)
+        optionsRowLayout.addWidget(regDump)
 
         optionsLayout = QVBoxLayout()
         optionsLayout.addLayout(optionsRowLayout)

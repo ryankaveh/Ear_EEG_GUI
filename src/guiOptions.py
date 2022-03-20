@@ -1,4 +1,7 @@
+import os
+import re
 from csv import writer
+from time import sleep
 
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton,QLineEdit, QScrollArea
 from PyQt5.QtGui import QRegExpValidator
@@ -8,7 +11,7 @@ import guiPlots
 
 class StartStop(QWidget):
 
-    def __init__(self, running, connectionPipe, saveDataMenuButton, chatWindow):
+    def __init__(self, running, connectionPipe, saveDataMenuButton, chatWindow, regDump):
 
         super().__init__()
 
@@ -16,10 +19,11 @@ class StartStop(QWidget):
         self.connectionPipe = connectionPipe
         self.saveDataMenuButton = saveDataMenuButton
         self.chatWindow = chatWindow
+        self.regDump = regDump
         layout = QHBoxLayout()
 
         self.connectButton = QPushButton("Connect")
-        self.connectButton.clicked.connect(self.connect)
+        self.connectButton.clicked.connect(lambda: self.connect()) # Lambda needed so parameters revert to defaults, connect send a boolean instead of no params
 
         self.startButton = QPushButton("Start")
         self.startButton.clicked.connect(self.start)
@@ -49,6 +53,7 @@ class StartStop(QWidget):
         self.saveDataMenuButton.setChangeable(False)
         self.startButton.setDisabled(True)
         self.stopButton.setDisabled(False)
+        self.regDump.disable()
 
         if self.cueSystem:
             self.cueSystem.startStopSync.setDisabled(True)
@@ -63,6 +68,7 @@ class StartStop(QWidget):
         self.saveDataMenuButton.setChangeable(True)
         self.stopButton.setDisabled(True)
         self.startButton.setDisabled(False)
+        self.regDump.enable()
 
         if self.cueSystem:
             self.cueSystem.startStopSync.setDisabled(False)
@@ -81,7 +87,9 @@ class StartStop(QWidget):
             self.startButton.setDisabled(False)
             self.startButton.show()
             self.stopButton.show()
+            self.chatWindow.commandWriter.runStartupCommands()
             self.chatWindow.commandWriter.enable()
+            self.regDump.enable()
             self.chatWindow.addMessage("Connection Success")
             print("Connection Success")
         else:
@@ -97,13 +105,18 @@ class StartStop(QWidget):
 
 class ChatWindow(QWidget):
 
-    def __init__(self, commandWriterPipe, sRCommandResponsePipe):
+    def __init__(self, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe):
 
         super().__init__()
 
         self.sRCommandResponsePipe = sRCommandResponsePipe
 
         self.refreshRate = 200 # Chat will update every 200 ms
+
+        self.regTimer = QTimer()
+        self.regTimer.setInterval(1) # Checks every 1 ms
+        self.regTimer.timeout.connect(self.collectRegDump)
+        self.regDumpValues = [] # Used to store values when performing a reg dump
 
         layout = QVBoxLayout()
         self.scrollArea = QScrollArea() # Will make it so the messages are scrollable
@@ -120,7 +133,7 @@ class ChatWindow(QWidget):
         messageBoxLayout.addWidget(self.messages)
         messageBox.setLayout(messageBoxLayout)
 
-        self.commandWriter = CommandWriter(commandWriterPipe, self)
+        self.commandWriter = CommandWriter(commandWriterPipe, startupCommandsFilename, self)
         layout.addWidget(self.commandWriter)
 
         self.setLayout(layout)
@@ -147,15 +160,36 @@ class ChatWindow(QWidget):
         scrollBar = self.scrollArea.verticalScrollBar()
         scrollBar.setSliderPosition(scrollBar.maximum())
 
+    def getAllRegValues(self, regNums):
+
+        self.timer.stop()
+
+        self.regDumpValues = ""
+
+        self.regTimer.start()
+
+        for num in regNums:
+            self.commandWriter.sendRegReadCommand(num)
+            sleep(0.01) # Sends command every 10 ms
+
+        self.timer.start()
+
+    def collectRegDump(self):
+
+        if self.sRCommandResponsePipe.poll():
+            response = self.sRCommandResponsePipe.recv()
+            self.regDumpValues.append(response)
+
 class CommandWriter(QWidget):
 
-    def __init__(self, commandWriterPipe, chatWindow):
+    def __init__(self, commandWriterPipe, startupCommandsFilename, chatWindow):
 
         super().__init__()
 
         self.enabled = False
 
         self.commandWriterPipe = commandWriterPipe
+        self.startupCommandsFilename = startupCommandsFilename
         self.chatWindow = chatWindow
 
         layout = QHBoxLayout()
@@ -174,16 +208,49 @@ class CommandWriter(QWidget):
     def sendCommand(self):
 
         if self.enabled:
-            text = self.commandInput.text()
-            self.commandWriterPipe.send(text)
-            self.chatWindow.addMessage("User: " + text)
-            self.commandInput.clear()
+            text = str.lower(self.commandInput.text())
+
+            if self.badCommandFormat(text):
+                return
+            else:
+                self.commandWriterPipe.send(text)
+                self.chatWindow.addMessage("User: " + text)
+                self.commandInput.clear()
         else:
             self.chatWindow.addMessage("Please Connect to a Device First")
         
     def sendStreamCommand(self):
 
         self.commandWriterPipe.send("stream")
+
+    def sendRegReadCommand(self, regNum): # regNum should be a 2 digit string 00-99
+
+        self.commandWriterPipe.send("read reg " + regNum)
+
+    def runStartupCommands(self):
+
+        if os.path.exists(self.startupCommandsFilename):
+            print("Running Startup Commands")
+            with open(self.startupCommandsFilename, 'r') as startupCommands:
+                commands = startupCommands.read().splitlines()
+                for com in commands:
+                    if not self.badCommandFormat(com):
+                        self.commandWriterPipe.send(com)
+                        self.chatWindow.addMessage("Startup: " + com) 
+        else:
+            print("No Startup Commands File Found, Looking For: " + self.startupCommandsFilename)
+
+    def badCommandFormat(self, text): # Returns true on a failure
+
+        if re.search(r"^read reg", text) and not re.search(r"^read reg [0-9]{2}$", text):
+            self.chatWindow.addMessage("Must follow format `read reg xx` where xx is 00-99")
+            return True
+        elif re.search(r"^write reg", text) and not re.search(r"^write reg [0-9]{2} [0-9a-f]{4}$", text):
+            self.chatWindow.addMessage("Must follow format `write reg xx yyyy` where xx is 00-99 and yyyy is 0000-ffff")
+            return True
+        else:
+            return False
+
 
 class XAxisResizer(QWidget):
 
@@ -249,7 +316,48 @@ class LayoutSaver(QWidget):
             configWriter.writerows(plotLayout)
 
         self.chatWindow.addMessage("Current Layout Saved as Default")
-        
+
+class RegDump(QWidget):
+
+    def __init__(self, regDumpFilename, chatWindow):
+
+        super().__init__()
+
+        self.regDumpFilename = regDumpFilename
+        self.chatWindow = chatWindow
+
+        layout = QHBoxLayout()
+
+        self.regDumpButton = QPushButton("Save All Registers")
+        self.regDumpButton.clicked.connect(self.dumpRegs)
+        self.regDumpButton.setEnabled(False)
+
+        layout.addWidget(self.regDumpButton)
+
+        self.setLayout(layout)
+
+    def enable(self):
+
+        self.regDumpButton.setEnabled(True)
+
+    def disable(self):
+
+        self.regDumpButton.setEnabled(False)
+
+    def dumpRegs(self):
+
+        regNums = ["0" + str(i) for i in range(10)] + [str(i) for i in range(10,64)]
+        self.chatWindow.getAllRegValues(regNums)
+        sleep(1) # Sleeps to make sure all responses have been received
+
+        self.chatWindow.regTimer.stop()
+        regDumpValues = self.chatWindow.regDumpValues
+        print(regDumpValues)
+
+        with open(self.regDumpFilename, 'a') as regDump:
+            for idx, regVal in enumerate(regDumpValues):
+                regDump.write(regNums[idx] + regVal)
+
 # Class containing all of the dropdown menues corrosponding to a certain PlotColumn
 class ColumnDropdowns(QWidget):
 

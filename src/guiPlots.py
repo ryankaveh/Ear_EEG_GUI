@@ -141,7 +141,7 @@ class DataProcess():
                 self.updateData()
 
             # This sleep is just to cap the refresh rate to lower the load on the computer, really no need to go full speed
-            sleep(self.refreshRate*.001)
+            sleep(self.refreshRate*0.001)
 
     # Recalculates the graphical data to return based on the raw input
     def updateData(self):
