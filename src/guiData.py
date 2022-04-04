@@ -1,4 +1,5 @@
 import os, serial
+from re import X
 from time import sleep, time
 from csv import writer
 from ctypes import Structure, c_ubyte, c_byte, c_short, c_int
@@ -18,17 +19,18 @@ class SerialReader():
         self.commandWriterPipe = commandWriterPipe
         self.commandResponsePipe = commandResponsePipe
 
-        self.refreshRate = 1 # Refresh rate in ms
+        self.refreshRate = 1 # Refresh rate in ms, controls how often new data is looked for
         self.commandMode = True # Controls whether serialReader is looking for data or command responses, always starts in command mode
 
     # Starts a loop to call the startSerialReader function 
     def startSerialReader(self):
 
         while not self.serialGUISide: # This waits for the client to create the port
+            sleep(0.1) # This caps the refresh rate and lowers the load on the computer, full speed not needed
             try:
                 # Connection is in startSerialReader because otherwise it doesn't really work with the multiprocessing
-                # self.serialGUISide = serial.Serial(self.port, 9600, rtscts=True, dsrdtr=True) # Uncomment for emulator
-                self.serialGUISide = serial.Serial(self.port, 115200, rtscts=True, dsrdtr=True)
+                self.serialGUISide = serial.Serial(self.port, 9600, rtscts=True, dsrdtr=True) # Uncomment for emulator
+                # self.serialGUISide = serial.Serial(self.port, 115200, rtscts=True, dsrdtr=True)
             except:
                 pass
 
@@ -44,8 +46,8 @@ class SerialReader():
                     self.commandMode = not self.commandMode
                     sleep(0.1)
                     self.serialGUISide.reset_input_buffer() # Resets the buffer on both start and stop
-            # This sleep is just to cap the refresh rate to lower the load on the computer, really no need to go full speed
-            sleep(self.refreshRate*0.001)
+            
+            sleep(self.refreshRate * 0.001) # This caps the refresh rate and lowers the load on the computer, full speed not needed
 
     def updateData(self):
 
@@ -71,25 +73,23 @@ class SerialReader():
 
                 idx = 0
                 for i in range(1, len(val) - 1, self.numChannels):
-                    chxEEG = int.from_bytes(val[i:i+3], "big", signed=True)
-                    chxI = int.from_bytes(val[i+3:i+5], "big", signed=True)
-                    chxQ = int.from_bytes(val[i+5:i+7], "big", signed=True)
-                    chxEDO = int.from_bytes(val[i+7:i+8], "big", signed=True)
+                    chxEEG = int.from_bytes(val[i:i+4], "big", signed=True)
+                    chxI = int.from_bytes(val[i+4:i+6], "big", signed=True)
+                    chxQ = int.from_bytes(val[i+6:i+8], "big", signed=True)
 
                     with self.channelDataArr[idx].get_lock():
                         self.channelDataArr[idx].chxEEG = chxEEG
                         self.channelDataArr[idx].chxI = chxI
                         self.channelDataArr[idx].chxQ = chxQ
-                        self.channelDataArr[idx].chxEDO = chxEDO
                         self.channelDataArr[idx].packetId = packetId
                     idx += 1
 
-                    saveData.extend((chxEEG, chxI, chxQ, chxEDO))
+                    saveData.extend((chxEEG, chxI, chxQ))
                 
                 self.saveDataQueue.put(saveData) # We might want this to be put_nowait
 
 class ChannelData(Structure):
-    _fields_ = [("packetId", c_ubyte), ("chxEEG", c_int), ("chxI", c_short), ("chxQ", c_short), ("chxEDO", c_byte)]
+    _fields_ = [("packetId", c_ubyte), ("chxEEG", c_int), ("chxI", c_short), ("chxQ", c_short)]
 
 class SaveDataMenuButton(QPushButton):
 
@@ -108,6 +108,7 @@ class SaveDataMenuButton(QPushButton):
         self.menu = None
 
     def showPopup(self):
+
         if not self.menu:
             self.menu = SaveDataMenu(self, self.running, self.saveState, self.savePostprocessed, self.filename)
             self.menu.show()
@@ -115,16 +116,20 @@ class SaveDataMenuButton(QPushButton):
             self.menu.show()
 
     def setSaveState(self, state):
+
         self.saveState = state
 
     def setSavePostprocessedState(self, state):
+
         self.savePostprocessed = state
 
     def setFilename(self, currText):
+
         self.filename = str(currText)
         self.updatedFilename = True
 
     def setChangeable(self, changeable):
+
         if self.menu:
             self.menu.setChangeable(changeable)
 
@@ -145,7 +150,7 @@ class SaveDataMenu(QWidget):
         self.savePostprocessed = QCheckBox("Include Postprocessed Data")
         self.savePostprocessed.setCheckState(savePostprocessed)
         self.savePostprocessed.stateChanged.connect(button.setSavePostprocessedState)
-        self.savePostprocessed.setEnabled(False)#(not running.value) This is not currently implemented so the checkbox is disabled
+        self.savePostprocessed.setEnabled(False)#(not running.value) This is not currently implemented so the checkbox is disabled TODO
 
         self.filenameLable = QLabel("Filename:")
         self.filename = QLineEdit(filename)
@@ -177,8 +182,8 @@ class SaveDataWriter(QWidget):
 
         super().__init__()
 
-        # Header format: ["packet_id", "chx1_eeg", "chx1_i", "chx1_q", "chx1_edo", "chx2_eeg", "chx2_i", "chx2_q", "chx2_edo", ...]
-        self.header = ["packet_id"] + [itm for lst in [[chxNum + "_eeg", chxNum + "_i", chxNum + "_q", chxNum + "_edo"] for chxNum in ["chx" + str(i) for i in range(1,numChannels + 1)]] for itm in lst]
+        # Header format: ["packet_id", "chx1_eeg", "chx1_i", "chx1_q", "chx2_eeg", "chx2_i", "chx2_q", ...]
+        self.header = ["packet_id"] + [itm for lst in [[chxNum + "_eeg", chxNum + "_i", chxNum + "_q"] for chxNum in ["chx" + str(i) for i in range(1, numChannels + 1)]] for itm in lst]
 
         self.running = running
         self.saveDataQueue = saveDataQueue
@@ -186,7 +191,7 @@ class SaveDataWriter(QWidget):
 
         self.setCurrFilename()
 
-        self.refreshRate = 5
+        self.refreshRate = 5 # Refresh rate in ms, controls how often new data is looked for
 
         self.hide()
 
@@ -198,22 +203,27 @@ class SaveDataWriter(QWidget):
         self.timer.start()
 
     def writeData(self):
+
         if bool(self.saveDataMenuButton.saveState) and bool(self.running.value) and not self.saveDataQueue.empty():
             saveData = self.saveDataQueue.get() # Possibly not exitable on windows? https://docs.python.org/3/library/queue.html#put
             shouldWriteHeader = not os.path.exists(self.currFilename)
+
             with open(self.currFilename, 'a') as csvfile:
                 dataWriter = writer(csvfile) # CSV writer
                 if shouldWriteHeader:
                     dataWriter.writerow(self.header)
                 dataWriter.writerow(saveData)
             self.updatedExtenstion = False
+
         elif (not self.updatedExtenstion or self.saveDataMenuButton.updatedFilename) and not bool(self.running.value):
             self.setCurrFilename()
+
         # This clause works to empty the queue if the user hasn't yet clicked start
         elif not bool(self.running.value) and not self.saveDataQueue.empty():
             self.saveDataQueue.get()
 
     def setCurrFilename(self):
+
         idx = 0
         self.currFilename = "../data/" + str(self.saveDataMenuButton.filename) + "-" + str(idx) + ".csv"
         while os.path.exists(self.currFilename):

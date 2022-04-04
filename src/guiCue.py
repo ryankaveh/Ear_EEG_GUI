@@ -77,7 +77,7 @@ class CueSystem(QWidget):
         self.cueStop = QPushButton("Stop")
         self.cueStop.clicked.connect(self.stopTest)
         cueStartStopLayout.addWidget(self.cueStop, 0, 1)
-        self.cueStop.setDisabled(True)
+        self.cueStop.setEnabled(False)
         
         startStopSyncLabel = QLabel("Sync Start/Stop Buttons")
         self.startStopSync = QCheckBox()
@@ -167,9 +167,9 @@ class CueSystem(QWidget):
 
     def runTest(self):
 
-        self.cueStart.setDisabled(True)
-        self.startStopSync.setDisabled(True)
-        self.cueStop.setDisabled(False)
+        self.cueStart.setEnabled(False)
+        self.startStopSync.setEnabled(False)
+        self.cueStop.setEnabled(True)
 
         self.resetTooltip()
 
@@ -325,9 +325,9 @@ class CueSystem(QWidget):
         self.cuePrompt.duration.setText("0s")
         self.cuePrompt.cueText.setText("No Test Running")
 
-        self.cueStop.setDisabled(True)
-        self.startStopSync.setDisabled(False)
-        self.cueStart.setDisabled(False)
+        self.cueStop.setEnabled(False)
+        self.startStopSync.setEnabled(True)
+        self.cueStart.setEnabled(True)
 
         self.resetTooltip()
 
@@ -354,7 +354,7 @@ class CueSystem(QWidget):
             inital = np.linspace(0, length, length * samplingFreq)
             amPiece = np.cos(2 * np.pi * self.amFreq * inital)
             carrierPiece = np.cos(2 * np.pi * self.carrierFreq * inital)
-            fullTone = (self.carrierAmp + self.modAmp * amPiece * carrierPiece).astype(np.float32) # TODO: is this equation correct?
+            fullTone = (self.carrierAmp + self.modAmp * amPiece * carrierPiece).astype(np.float32)
 
             # Start playback
             sa.play_buffer(fullTone, 1, 4, samplingFreq)
@@ -367,7 +367,7 @@ class CueSystem(QWidget):
             inital = np.linspace(0, length, length * samplingFreq)
             amPiece = np.cos(2 * np.pi * self.amFreq * inital)
             whiteNoisePiece = np.tile(whiteNoise, numRepeats)
-            fullSound = (self.carrierAmp + self.modAmp * amPiece * whiteNoisePiece).astype(np.float32) # TODO: is this equation correct?
+            fullSound = (self.carrierAmp + self.modAmp * amPiece * whiteNoisePiece).astype(np.float32)
 
         # Start playback
         sa.play_buffer(fullSound, 1, 4, samplingFreq)

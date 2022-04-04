@@ -83,7 +83,7 @@ class CustomPlotWidget(PlotWidget):
         self.setBackground('w')
         self.dataProcess = dataProcess
 
-        self.refreshRate = 50 # How fast to redraw graph in milliseconds, currently not a parameter as will probably be same for every graph
+        self.refreshRate = 50 # Refresh rate in ms, controls how often graphs are redrawn
 
         self.pen = mkPen(color=(0,0,0), width=3) # Sets color and size of line drawn on graph
 
@@ -131,7 +131,7 @@ class DataProcess():
         self.y[:] = [0] * xAxisLength.value
         self.lock = mp.RLock()
 
-        self.refreshRate = 10
+        self.refreshRate = 10 # Refresh rate in ms, controls how often new data is looked for
 
     # Starts a loop to call the updateData function 
     def startUpdateData(self):
@@ -140,15 +140,15 @@ class DataProcess():
             if bool(self.running.value):
                 self.updateData()
 
-            # This sleep is just to cap the refresh rate to lower the load on the computer, really no need to go full speed
-            sleep(self.refreshRate*0.001)
+            sleep(self.refreshRate * 0.001) # This caps the refresh rate and lowers the load on the computer, full speed not needed
 
     # Recalculates the graphical data to return based on the raw input
     def updateData(self):
-        newX = self.counter.value + 1 # TODO: This should prob be updated to use the difference between the current and next packet ID
+        # newX = self.counter.value + 1 # Old version, use if difference between the current and next packet ID isn't working
         with self.channelData.get_lock():
             packetId = self.channelData.packetId
             newY = self.calculateY()
+        newX = self.counter + ((packetId - self.currPacket) % 256) # Assuming no dropped packets this should be 1, % 256 as packets are 0-255
 
         if self.currPacket != packetId:
             # If the graph appears as if it is dropping packets you can in theory use a non-locked array to keep track of values
@@ -156,13 +156,13 @@ class DataProcess():
                 self.x[:] = self.x[1:] + [newX] # FYI iterating through is super slow compared to this apperently
                 self.y[:] = self.y[1:] + [newY]
                 self.currPacket = packetId
-                self.counter.value = newX 
+                self.counter = newX 
 
     def resizeXAxis(self, newXAxisLength):
         currXAxisLength = self.xAxisLength.value
         if newXAxisLength > currXAxisLength:
             diff = newXAxisLength - currXAxisLength
-            currEnd = self.counter.value + 1 - currXAxisLength
+            currEnd = self.counter + 1 - currXAxisLength
 
             with self.lock:
                 self.x[:] = list(range(currEnd - diff, currEnd)) + self.x[:]
@@ -182,11 +182,11 @@ class DataProcess():
                 self.xAxisLength.value = newXAxisLength
 
 # Data process for a simple sine wave
-class EEGPlusEDODataProcess(DataProcess):
+class EEGDataProcess(DataProcess):
 
     def calculateY(self):
 
-        return self.channelData.chxEEG + self.channelData.chxEDO
+        return self.channelData.chxEEG
 
 # Data process for a simple sine wave
 class IQMagDataProcess(DataProcess):
@@ -199,6 +199,6 @@ class IQMagDataProcess(DataProcess):
 class IQPhaseDataProcess(DataProcess):
 
     def calculateY(self):
-        if self.channelData.chxI == 0: # Is this the appropriate response (sometimes a zero appears not from the chip but on startup) TODO
+        if self.channelData.chxI == 0:
             return 0
         return math.atan(self.channelData.chxQ / self.channelData.chxI)

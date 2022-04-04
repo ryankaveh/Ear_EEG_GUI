@@ -1,4 +1,4 @@
-import os, sys, atexit, argparse
+import os, sys, argparse
 from time import sleep
 from csv import reader, writer
 from serial.tools import list_ports
@@ -18,7 +18,6 @@ import guiPlots
 # Maybe something to do when packet ids are the same, error creating same packet id triggers this on some processes (not all) every time
 # 
 # Clean Code
-#   Set qwidget/qlayout parent
 #   TODOS
 #   Comments + documentation
 # Testing
@@ -32,18 +31,17 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Ear EEG GUI")
 
+
         numChannels = 8 # Number of channels to expect, will definitely break if value is incorrect
         vid = 0x1915 # Nordic device vendor id, used for auto connect, change if desired connectionb device changes
         pid = 0x521A # Corrosponding product id, use same as vendor id
-        configFilename = "guiConfig.csv"
-        startupCommandsFilename = "startupCommands.txt"
-        regDumpFilename = "regDump.txt"
+        configFilename = "guiConfig.csv" # Filename from which to save and load plot configurations, regenerated automatically on deletion
+        startupCommandsFilename = "startupCommands.txt" # Filename from which to run commands automatically on connection, step skipped if file not found
+        regDumpFilename = "regDump.txt" # Filename in which to append dumped registers
 
         # List of all DataProcesses that can become graphs (and then be shown) during runtime
-        # First item in the tuple is supposed to be the name of the graph, is currently just its color
+        # First item in the tuple is the name of the graph
         possPlotData = []
-
-        self.manager = mp.Manager()
 
         running = mp.Value('i', False) # Univerally controls whether the DataProcesses run and CustomGraphWidgets redraw themselves
 
@@ -51,7 +49,7 @@ class MainWindow(QMainWindow):
         if commandLinePort:
             port = commandLinePort
         else:
-            # port = "./ttyGUI" # Emulator
+            # port = "../EMULATOR/ttyGUI" # Hardcoded port formulator
             # port = "/dev/cu.usbmodem0000000000001" Can be used to manually set port (instead of auto), if so comment out following block
             set = False
             for device in list_ports.comports():
@@ -63,44 +61,44 @@ class MainWindow(QMainWindow):
                 port = "/dev/cu.usbmodem0000000000001"
                 print("Auto connection failed, no device with correct vendor and product id found, reverting to default: " + port)
             
-
         channelDataArr = []
         for i in range(0, numChannels):
             lock = mp.RLock()
             channelDataArr.append(mp.Value(guiData.ChannelData, 0, 0, 0, 0, lock=lock))
 
-        saveDataQueue = self.manager.Queue()
+        self.manager = mp.Manager() # Manager used to spawn multiprocessing processes
+        saveDataQueue = self.manager.Queue() # This queue is used to send data from the SerialReader to the SaveDataWriter
 
-        connectionPipe, sRConnectionPipe = mp.Pipe()
-        commandWriterPipe, sRCommandWriterPipe = mp.Pipe()
-        commandResponsePipe, sRCommandResponsePipe = mp.Pipe()
+        connectionPipe, sRConnectionPipe = mp.Pipe() # Sends a 1 to let main processes know that device is successfully connected
+        commandWriterPipe, sRCommandWriterPipe = mp.Pipe() # Used to send commands from the chat window in the main process to the SerialReader (who then sends them to the chip)
+        commandResponsePipe, sRCommandResponsePipe = mp.Pipe() # Used to send the chip response from commands from SerialReader to the chat window
 
+        # The SerialReader class runs on a different process and handles all interactions with the chip (data and commands)
         serialReader = guiData.SerialReader(port, numChannels, channelDataArr, saveDataQueue, sRConnectionPipe, sRCommandWriterPipe, commandResponsePipe)
         self.serialReaderProcess = mp.Process(target=serialReader.startSerialReader)
         self.serialReaderProcess.daemon = True
         self.serialReaderProcess.start()
 
-        xAxisLength = 100
+        xAxisLength = 100 # Default length of the xAxis
+        counterStart = -1 # Starts at -1 as this will never be a packet id so the first packet will be counted (the code check if the packet ids are different)
 
-        self.processes = []
-        for i in range(numChannels):
-            managedX = self.manager.list()
-            managedY = self.manager.list()
-            managedAxisLen = mp.Value('i', xAxisLength)
-            managedCounter = mp.Value('i', -1)
-            eegPlusEDODataProcess = guiPlots.EEGPlusEDODataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, managedCounter)
-            p = mp.Process(target=eegPlusEDODataProcess.startUpdateData)
-            p.daemon = True
+        self.processes = [] # Contains all data post-processing processes (that are then sent to their corresponding graphs)
+        for i in range(numChannels): # Each channel has three different post-processes applied
+            managedX = self.manager.list() # List of the most recent X values, updated by data process then used by the graph
+            managedY = self.manager.list() # List of the most recent X values, updated by data process then used by the graph
+            managedAxisLen = mp.Value('i', xAxisLength) # Shared xAxis length between main process (updates this value) and data process (uses this value)
+            eegDataProcess = guiPlots.EEGDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, counterStart)
+            p = mp.Process(target=eegDataProcess.startUpdateData) # Starts the while loop that will check for new data
+            p.daemon = True # Forces processes to end when program is closed 
             p.start()
             self.processes.append(p)
 
-            possPlotData.append(("Ch " + str(i) + " EEG + EDO", eegPlusEDODataProcess))
+            possPlotData.append(("Ch " + str(i) + " EEG", eegDataProcess)) # Adds name and data process to the possible graphs
 
             managedX = self.manager.list()
             managedY = self.manager.list()
             managedAxisLen = mp.Value('i', xAxisLength)
-            managedCounter = mp.Value('i', -1)
-            iQMagDataProcess = guiPlots.IQMagDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, managedCounter)
+            iQMagDataProcess = guiPlots.IQMagDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, counterStart)
             p = mp.Process(target=iQMagDataProcess.startUpdateData)
             p.daemon = True
             p.start()
@@ -111,8 +109,7 @@ class MainWindow(QMainWindow):
             managedX = self.manager.list()
             managedY = self.manager.list()
             managedAxisLen = mp.Value('i', xAxisLength)
-            managedCounter = mp.Value('i', -1)
-            iQPhaseDataProcess = guiPlots.IQPhaseDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, managedCounter)
+            iQPhaseDataProcess = guiPlots.IQPhaseDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, counterStart)
             p = mp.Process(target=iQPhaseDataProcess.startUpdateData)
             p.daemon = True
             p.start()
@@ -120,7 +117,7 @@ class MainWindow(QMainWindow):
 
             possPlotData.append(("Ch " + str(i) + " phase(I&Q)", iQPhaseDataProcess))
 
-        plotLayout = []
+        plotLayout = [] # 2d array list with two inner arrays, each repersenting one of the plot columns, inside inner arrays are the numbers corresponding with which graph to show
         if os.path.exists(configFilename):
             print("Loading Config")
             with open(configFilename, 'r') as config:
@@ -143,13 +140,9 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(mainWidget)
 
-        atexit.register(self.exitGracefully)
+    def closeEvent(self, _):
 
-    def exitGracefully(self):
-        for p in self.processes:
-            p.terminate()
-        self.serialReaderProcess.terminate()
-        sys.exit()
+        QApplication.closeAllWindows() # Used to close any extra windows (such as cue or save data) that may have been opened
 
 class CustomGridLayout(QGridLayout):
 
@@ -172,6 +165,8 @@ class CustomGridLayout(QGridLayout):
 
         defaultPlots = []
         defaultPlotDropdowns = []
+
+        # There isn't much error checking for the layout, if layout is causing issues here, delete layout file
         for column in plotLayout:
             currentSublist = []
             defaultPlotsSublist = []
@@ -211,7 +206,7 @@ class CustomGridLayout(QGridLayout):
         saveDataMenuButton = guiData.SaveDataMenuButton(running)
 
         saveDataWriter = guiData.SaveDataWriter(running, numChannels, saveDataQueue, saveDataMenuButton)
-        saveDataWriter.startSaveDataWriter()
+        saveDataWriter.startSaveDataWriter() # Not in its own process as implmentation would be complicated and it is the only demanding task on the main proces
 
         chatWindow = guiOptions.ChatWindow(commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe)
         chatWindow.startUpdate()
@@ -243,14 +238,13 @@ class CustomGridLayout(QGridLayout):
 
         self.parent.addLayout(combindedPlotColumnLayout, 0, 0)
         self.parent.addLayout(optionsChatLayout, 1, 0)
-
-        # self.parent.addWidget(serialReader, 4, 0) # The SerialReader and SaveDataWriter both hide themselves, are only attached to be in the event loop
-        self.parent.addWidget(saveDataWriter, 4, 1) # TODO check if needed
+        
+        self.parent.addWidget(saveDataWriter, 2, 0) # SaveDataWriter hides itself and is only attached to be in the event loop
 
         current.append([columnDropdowns0, columnDropdowns1]) # Last item in current is list of ColumnDropdowns so they can reference each other
 
         sleep(1) # Program has to wait for other processes to connect to device before checking
-        # 1s wait seems to work but if auto connection is failing but manually clicking works, try making the sleep longer
+        # 1s wait seems to work but if auto connection is failing but manually connecting works, try making the sleep longer
         startStop.connect("Automatic Connection Attempt Failed") # Automatically clicks "connect" button, gives unique error message on failure
         
 

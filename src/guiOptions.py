@@ -1,7 +1,7 @@
 import os
 import re
 from csv import writer
-from time import sleep
+from time import sleep, time
 
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QHBoxLayout, QWidget, QComboBox, QPushButton,QLineEdit, QScrollArea
 from PyQt5.QtGui import QRegExpValidator
@@ -27,12 +27,12 @@ class StartStop(QWidget):
 
         self.startButton = QPushButton("Start")
         self.startButton.clicked.connect(self.start)
-        self.startButton.setDisabled(True)
+        self.startButton.setEnabled(False)
         self.startButton.hide()
 
         self.stopButton = QPushButton("Stop")
         self.stopButton.clicked.connect(self.stop)
-        self.stopButton.setDisabled(True)
+        self.stopButton.setEnabled(False)
         self.stopButton.hide()
 
         layout.addWidget(self.connectButton, 1)
@@ -51,12 +51,12 @@ class StartStop(QWidget):
 
         self.running.value = True
         self.saveDataMenuButton.setChangeable(False)
-        self.startButton.setDisabled(True)
-        self.stopButton.setDisabled(False)
+        self.startButton.setEnabled(False)
+        self.stopButton.setEnabled(True)
         self.regDump.disable()
 
         if self.cueSystem:
-            self.cueSystem.startStopSync.setDisabled(True)
+            self.cueSystem.startStopSync.setEnabled(False)
         if self.synced:
             self.cueSystem.runTest()
 
@@ -66,12 +66,12 @@ class StartStop(QWidget):
 
         self.running.value = False
         self.saveDataMenuButton.setChangeable(True)
-        self.stopButton.setDisabled(True)
-        self.startButton.setDisabled(False)
+        self.stopButton.setEnabled(False)
+        self.startButton.setEnabled(True)
         self.regDump.enable()
 
         if self.cueSystem:
-            self.cueSystem.startStopSync.setDisabled(False)
+            self.cueSystem.startStopSync.setEnabled(True)
         if self.synced:
             self.cueSystem.stopTest()
 
@@ -82,16 +82,16 @@ class StartStop(QWidget):
     def connect(self, failureMessage="No Device Found"): # failureMessage used to modify message when automatic connection is attempted (currently on startup)
 
         if self.connectionPipe.poll():
+            self.chatWindow.addMessage("Connection Success")
+            print("Connection Success")
             self.connected = True
             self.connectButton.hide()
-            self.startButton.setDisabled(False)
+            self.startButton.setEnabled(True)
             self.startButton.show()
             self.stopButton.show()
             self.chatWindow.commandWriter.runStartupCommands()
             self.chatWindow.commandWriter.enable()
             self.regDump.enable()
-            self.chatWindow.addMessage("Connection Success")
-            print("Connection Success")
         else:
             self.chatWindow.addMessage(failureMessage)
             print(failureMessage)
@@ -111,7 +111,7 @@ class ChatWindow(QWidget):
 
         self.sRCommandResponsePipe = sRCommandResponsePipe
 
-        self.refreshRate = 200 # Chat will update every 200 ms
+        self.refreshRate = 200 # Refresh rate in ms, controls how often chat is updated
 
         self.regTimer = QTimer()
         self.regTimer.setInterval(1) # Checks every 1 ms
@@ -171,8 +171,6 @@ class ChatWindow(QWidget):
         for num in regNums:
             self.commandWriter.sendRegReadCommand(num)
             sleep(0.01) # Sends command every 10 ms
-
-        self.timer.start()
 
     def collectRegDump(self):
 
@@ -268,7 +266,6 @@ class XAxisResizer(QWidget):
 
         self.xAxisResizeButton = QPushButton("Resize")
         self.xAxisResizeButton.clicked.connect(self.resize)
-        #self.xAxisResizeButton.setDisabled(True) # TODO: setEnabled vs. setDisabled why do I use both
 
         layout.addWidget(self.xAxisLength)
         layout.addWidget(self.xAxisResizeButton)
@@ -351,10 +348,12 @@ class RegDump(QWidget):
         sleep(1) # Sleeps to make sure all responses have been received
 
         self.chatWindow.regTimer.stop()
+        self.chatWindow.timer.start()
         regDumpValues = self.chatWindow.regDumpValues
         print(regDumpValues)
 
         with open(self.regDumpFilename, 'a') as regDump:
+            regDump.write("Time Dumped: " + str(time()))
             for idx, regVal in enumerate(regDumpValues):
                 regDump.write(regNums[idx] + regVal)
 
