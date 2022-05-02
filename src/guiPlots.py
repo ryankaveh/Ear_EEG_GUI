@@ -193,7 +193,7 @@ class IQMagDataProcess(DataProcess):
 
     def calculateY(self):
         
-        return math.sqrt(self.channelData.chxI^2 + self.channelData.chxQ^2)
+        return math.sqrt(self.channelData.chxI**2 + self.channelData.chxQ**2)
     
 # Data process for a simple sine wave
 class IQPhaseDataProcess(DataProcess):

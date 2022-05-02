@@ -2,7 +2,7 @@ import os, serial
 from re import X
 from time import sleep, time
 from csv import writer
-from ctypes import Structure, c_ubyte, c_byte, c_short, c_int
+from ctypes import Structure, c_ubyte, c_short, c_int
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QCheckBox, QLineEdit
 from PyQt5.QtCore import QTimer
 
@@ -45,27 +45,28 @@ class SerialReader():
                 if command == "stream": # Stream is sent on both start and stop
                     self.commandMode = not self.commandMode
                     sleep(0.1)
-                    self.serialGUISide.reset_input_buffer() # Resets the buffer on both start and stop
+                    # self.serialGUISide.reset_input_buffer() # Resets the buffer on both start and stop
             
             sleep(self.refreshRate * 0.001) # This caps the refresh rate and lowers the load on the computer, full speed not needed
 
     def updateData(self):
-
+        # print(self.serialGUISide.in_waiting)
         if self.serialGUISide.in_waiting > 0:
+            if self.serialGUISide.in_waiting == 1:
+                self.serialGUISide.reset_input_buffer()
+
             val = b''
 
             if self.commandMode:
                 sleep(0.1) # Make sure full response is transmitted
-                while self.serialGUISide.in_waiting > 0:
-                    val += self.serialGUISide.read()
+                val += self.serialGUISide.read(self.serialGUISide.in_waiting)
                 # print("Chip response: " + val.decode())
                 print("Chip response: " + str(val.hex()))
                 # self.commandResponsePipe.send("Chip: " + val.decode())
                 self.commandResponsePipe.send("Chip: " + str(val.hex()))
                 # self.serialGUISide.reset_input_buffer() # Currently throws away text responses as they aren't consistent enought to deal with
             else:
-                for i in range(65): # Signal is of exactly length 65
-                    val += self.serialGUISide.read()
+                val += self.serialGUISide.read(65) # Signal is of exactly length 65
 
                 packetId = int.from_bytes(val[:1], "big")
                 
@@ -183,7 +184,7 @@ class SaveDataWriter(QWidget):
         super().__init__()
 
         # Header format: ["packet_id", "chx1_eeg", "chx1_i", "chx1_q", "chx2_eeg", "chx2_i", "chx2_q", ...]
-        self.header = ["packet_id"] + [itm for lst in [[chxNum + "_eeg", chxNum + "_i", chxNum + "_q"] for chxNum in ["chx" + str(i) for i in range(1, numChannels + 1)]] for itm in lst]
+        self.header = ["packet_id"] + [itm for lst in [[chxNum + "_eeg", chxNum + "_i", chxNum + "_q"] for chxNum in ["chx" + str(i) for i in range(numChannels)]] for itm in lst]
 
         self.running = running
         self.saveDataQueue = saveDataQueue
