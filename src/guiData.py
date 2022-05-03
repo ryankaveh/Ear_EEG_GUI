@@ -19,7 +19,7 @@ class SerialReader():
         self.commandWriterPipe = commandWriterPipe
         self.commandResponsePipe = commandResponsePipe
 
-        self.refreshRate = 1 # Refresh rate in ms, controls how often new data is looked for
+        self.refreshRate = 10 # # Refresh rate in ms, only used when in command mode
         self.commandMode = True # Controls whether serialReader is looking for data or command responses, always starts in command mode
 
     # Starts a loop to call the startSerialReader function 
@@ -47,17 +47,11 @@ class SerialReader():
                     sleep(0.1)
                     # self.serialGUISide.reset_input_buffer() # Resets the buffer on both start and stop
             
-            sleep(self.refreshRate * 0.001) # This caps the refresh rate and lowers the load on the computer, full speed not needed
-
     def updateData(self):
-        # print(self.serialGUISide.in_waiting)
-        if self.serialGUISide.in_waiting > 0:
-            if self.serialGUISide.in_waiting == 1:
-                self.serialGUISide.reset_input_buffer()
 
-            val = b''
-
-            if self.commandMode:
+        if self.commandMode:
+            sleep(self.refreshRate * 0.001) # This caps the refresh rate and lowers the load on the computer, full speed not needed
+            if self.serialGUISide.in_waiting > 0:
                 sleep(0.1) # Make sure full response is transmitted
                 val += self.serialGUISide.read(self.serialGUISide.in_waiting)
                 # print("Chip response: " + val.decode())
@@ -65,29 +59,34 @@ class SerialReader():
                 # self.commandResponsePipe.send("Chip: " + val.decode())
                 self.commandResponsePipe.send("Chip: " + str(val.hex()))
                 # self.serialGUISide.reset_input_buffer() # Currently throws away text responses as they aren't consistent enought to deal with
-            else:
-                val += self.serialGUISide.read(65) # Signal is of exactly length 65
 
-                packetId = int.from_bytes(val[:1], "big")
-                
-                saveData = [packetId]
+        elif self.serialGUISide.in_waiting > 0:
+            if self.serialGUISide.in_waiting < 4:
+                self.serialGUISide.reset_input_buffer()
 
-                idx = 0
-                for i in range(1, len(val) - 1, self.numChannels):
-                    chxEEG = int.from_bytes(val[i:i+4], "big", signed=True)
-                    chxI = int.from_bytes(val[i+4:i+6], "big", signed=True)
-                    chxQ = int.from_bytes(val[i+6:i+8], "big", signed=True)
+            val = b''
+            val += self.serialGUISide.read(65) # Signal is of exactly length 65
 
-                    with self.channelDataArr[idx].get_lock():
-                        self.channelDataArr[idx].chxEEG = chxEEG
-                        self.channelDataArr[idx].chxI = chxI
-                        self.channelDataArr[idx].chxQ = chxQ
-                        self.channelDataArr[idx].packetId = packetId
-                    idx += 1
+            packetId = int.from_bytes(val[:1], "big")
+            
+            saveData = [packetId]
 
-                    saveData.extend((chxEEG, chxI, chxQ))
-                
-                self.saveDataQueue.put(saveData) # We might want this to be put_nowait
+            idx = 0
+            for i in range(1, len(val) - 1, self.numChannels):
+                chxEEG = int.from_bytes(val[i:i+4], "big", signed=True)
+                chxI = int.from_bytes(val[i+4:i+6], "big", signed=True)
+                chxQ = int.from_bytes(val[i+6:i+8], "big", signed=True)
+
+                with self.channelDataArr[idx].get_lock():
+                    self.channelDataArr[idx].chxEEG = chxEEG
+                    self.channelDataArr[idx].chxI = chxI
+                    self.channelDataArr[idx].chxQ = chxQ
+                    self.channelDataArr[idx].packetId = packetId
+                idx += 1
+
+                saveData.extend((chxEEG, chxI, chxQ))
+            
+            self.saveDataQueue.put(saveData) # We might want this to be put_nowait
 
 class ChannelData(Structure):
     _fields_ = [("packetId", c_ubyte), ("chxEEG", c_int), ("chxI", c_short), ("chxQ", c_short)]

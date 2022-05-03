@@ -131,7 +131,7 @@ class DataProcess():
         self.y[:] = [0] * xAxisLength.value
         self.lock = mp.RLock()
 
-        self.refreshRate = 10 # Refresh rate in ms, controls how often new data is looked for
+        self.refreshRate = 4 # Refresh rate in ms, controls how often new data is looked for
 
     # Starts a loop to call the updateData function 
     def startUpdateData(self):
