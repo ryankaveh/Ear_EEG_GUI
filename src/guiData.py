@@ -29,12 +29,16 @@ class SerialReader():
             sleep(0.1) # This caps the refresh rate and lowers the load on the computer, full speed not needed
             try:
                 # Connection is in startSerialReader because otherwise it doesn't really work with the multiprocessing
-                self.serialGUISide = serial.Serial(self.port, 9600, rtscts=True, dsrdtr=True) # Uncomment for emulator
-                # self.serialGUISide = serial.Serial(self.port, 115200, rtscts=True, dsrdtr=True)
+                # self.serialGUISide = serial.Serial(self.port, 9600, rtscts=True, dsrdtr=True) # Uncomment for emulator
+                self.serialGUISide = serial.Serial(self.port, 115200, rtscts=True, dsrdtr=True)
             except:
                 pass
 
         self.connectionPipe.send(1) # Callback to notify main loop that device is connected
+        print("Writing stop to chip")
+        self.serialGUISide.write(("stop" + " \n").encode())
+        self.serialGUISide.write(("stop" + " \n").encode())
+        self.serialGUISide.write(("stop" + " \n").encode())
 
         while True:
             self.updateData()
@@ -42,10 +46,10 @@ class SerialReader():
                 command = self.commandWriterPipe.recv().strip()
                 print("Writing " + command + " to chip")
                 self.serialGUISide.write((command + " \n").encode())
-                if command == "stream": # Stream is sent on both start and stop
-                    self.commandMode = not self.commandMode
+                if command == "start" or command == "stop":
+                    self.commandMode = (command == "stop")
                     sleep(0.1)
-                    # self.serialGUISide.reset_input_buffer() # Resets the buffer on both start and stop
+                    # self.serialGUISide.reset_input_buffer()
             
     def updateData(self):
 
@@ -53,6 +57,7 @@ class SerialReader():
             sleep(self.refreshRate * 0.001) # This caps the refresh rate and lowers the load on the computer, full speed not needed
             if self.serialGUISide.in_waiting > 0:
                 sleep(0.1) # Make sure full response is transmitted
+                val = b''
                 val += self.serialGUISide.read(self.serialGUISide.in_waiting)
                 # print("Chip response: " + val.decode())
                 print("Chip response: " + str(val.hex()))

@@ -31,7 +31,6 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Ear EEG GUI")
 
-
         numChannels = 8 # Number of channels to expect, will definitely break if value is incorrect
         vid = 0x1915 # Nordic device vendor id, used for auto connect, change if desired connectionb device changes
         pid = 0x521A # Corrosponding product id, use same as vendor id
@@ -39,83 +38,88 @@ class MainWindow(QMainWindow):
         startupCommandsFilename = "startupCommands.txt" # Filename from which to run commands automatically on connection, step skipped if file not found
         regDumpFilename = "regDump.txt" # Filename in which to append dumped registers
 
-        # List of all DataProcesses that can become graphs (and then be shown) during runtime
-        # First item in the tuple is the name of the graph
-        possPlotData = []
+        # List of all DataProcesses backends that be shown as graphs
+        # Contains ("Graph Name", DataProcess) tuples
+        plotDataProcesses = []
 
-        running = mp.Value('i', False) # Univerally controls whether the DataProcesses run and CustomGraphWidgets redraw themselves
+        running = mp.Value('i', False) # Controls whether the DataProcesses update and CustomGraphWidgets redraw themselves across all processes
 
-        # Creates SerialReader object to read data from serial port "port", populate channelDataArr and save the data to saveDataQueue
+        # Sets port to read data from to command line input if entered
         if commandLinePort:
             port = commandLinePort
+        # If no command line argument, port is found automatically based on device and vendor info
         else:
-            # port = "../EMULATOR/ttyGUI" # Hardcoded port formulator
-            # port = "/dev/cu.usbmodem0000000000001" Can be used to manually set port (instead of auto), if so comment out following block
+            # port = "../EMULATOR/ttyGUI" # Hardcoded port formulator, if so comment out following block
+            # port = "/dev/cu.usbmodem0000000000001" Used to manually set port, if so comment out following block
             set = False
             for device in list_ports.comports():
                 if device.vid == vid and device.pid == pid:
                     port = device.device
                     print("Correct port found to be " + port + ", connecting...")
                     set = True
+            # If no port with the correct vendor and device id is found, it falls back to a preset port
             if not set:
                 port = "/dev/cu.usbmodem0000000000001"
                 print("Auto connection failed, no device with correct vendor and product id found, reverting to default: " + port)
-            
+        
+        # List of numChannels (currently 8) C structs that hold the current packet id and channel data for each channel
+        # Used by DataProcesses to generate the graph data for all graphs
+        # Initalized to 0s, lock used to keep all data and corresponding packet id synchronized
         channelDataArr = []
         for i in range(0, numChannels):
             lock = mp.RLock()
             channelDataArr.append(mp.Value(guiData.ChannelData, 0, 0, 0, 0, lock=lock))
 
-        self.manager = mp.Manager() # Manager used to spawn multiprocessing processes
+        self.manager = mp.Manager() # Manager used to spawn all multiprocessing processes and generate multiprocessing objects
         saveDataQueue = self.manager.Queue() # This queue is used to send data from the SerialReader to the SaveDataWriter
 
-        connectionPipe, sRConnectionPipe = mp.Pipe() # Sends a 1 to let main processes know that device is successfully connected
-        commandWriterPipe, sRCommandWriterPipe = mp.Pipe() # Used to send commands from the chat window in the main process to the SerialReader (who then sends them to the chip)
+        connectionPipe, sRConnectionPipe = mp.Pipe() # Sends a 1 to let main processes know that the device is successfully connected
+        commandWriterPipe, sRCommandWriterPipe = mp.Pipe() # Used to send commands from the chat window (main process) to the SerialReader (handles chip interactions)
         commandResponsePipe, sRCommandResponsePipe = mp.Pipe() # Used to send the chip response from commands from SerialReader to the chat window
 
-        # The SerialReader class runs on a different process and handles all interactions with the chip (data and commands)
+        # Creates SerialReader object to read data from serial port "port", populate channelDataArr, and save the data to saveDataQueue
+        # The SerialReader update function runs on a different process and handles all interactions with the chip (data and commands)
         serialReader = guiData.SerialReader(port, numChannels, channelDataArr, saveDataQueue, sRConnectionPipe, sRCommandWriterPipe, commandResponsePipe)
         self.serialReaderProcess = mp.Process(target=serialReader.startSerialReader)
         self.serialReaderProcess.daemon = True
         self.serialReaderProcess.start()
 
         xAxisLength = 100 # Default length of the xAxis
-        counterStart = -1 # Starts at -1 as this will never be a packet id so the first packet will be counted (the code check if the packet ids are different)
 
-        self.processes = [] # Contains all data post-processing processes (that are then sent to their corresponding graphs)
+        self.processes = [] # Contains all post-processing processes (which then send data to their corresponding graph)
         for i in range(numChannels): # Each channel has three different post-processes applied
             managedX = self.manager.list() # List of the most recent X values, updated by data process then used by the graph
             managedY = self.manager.list() # List of the most recent X values, updated by data process then used by the graph
             managedAxisLen = mp.Value('i', xAxisLength) # Shared xAxis length between main process (updates this value) and data process (uses this value)
-            eegDataProcess = guiPlots.EEGDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, counterStart)
+            eegDataProcess = guiPlots.EEGDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen)
             p = mp.Process(target=eegDataProcess.startUpdateData) # Starts the while loop that will check for new data
             p.daemon = True # Forces processes to end when program is closed 
             p.start()
             self.processes.append(p)
 
-            possPlotData.append(("Ch " + str(i) + " EEG", eegDataProcess)) # Adds name and data process to the possible graphs
+            plotDataProcesses.append(("Ch " + str(i) + " EEG", eegDataProcess)) # Adds name and data process to the possible graphs
 
             managedX = self.manager.list()
             managedY = self.manager.list()
             managedAxisLen = mp.Value('i', xAxisLength)
-            iQMagDataProcess = guiPlots.IQMagDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, counterStart)
+            iQMagDataProcess = guiPlots.IQMagDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen)
             p = mp.Process(target=iQMagDataProcess.startUpdateData)
             p.daemon = True
             p.start()
             self.processes.append(p)
 
-            possPlotData.append(("Ch " + str(i) + " mag(I&Q)", iQMagDataProcess))
+            plotDataProcesses.append(("Ch " + str(i) + " mag(I&Q)", iQMagDataProcess))
 
             managedX = self.manager.list()
             managedY = self.manager.list()
             managedAxisLen = mp.Value('i', xAxisLength)
-            iQPhaseDataProcess = guiPlots.IQPhaseDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen, counterStart)
+            iQPhaseDataProcess = guiPlots.IQPhaseDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen)
             p = mp.Process(target=iQPhaseDataProcess.startUpdateData)
             p.daemon = True
             p.start()
             self.processes.append(p)
 
-            possPlotData.append(("Ch " + str(i) + " phase(I&Q)", iQPhaseDataProcess))
+            plotDataProcesses.append(("Ch " + str(i) + " phase(I&Q)", iQPhaseDataProcess))
 
         plotLayout = [] # 2d array list with two inner arrays, each repersenting one of the plot columns, inside inner arrays are the numbers corresponding with which graph to show
         if os.path.exists(configFilename):
@@ -133,7 +137,7 @@ class MainWindow(QMainWindow):
                 configWriter.writerows(plotLayout)
 
 
-        layout = CustomGridLayout(running, numChannels, possPlotData, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename, self.manager)
+        layout = CustomGridLayout(running, numChannels, plotDataProcesses, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename, self.manager)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
@@ -146,7 +150,7 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, running, numChannels, possPlotData, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename, manager):
+    def __init__(self, running, numChannels, plotDataProcesses, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename, manager):
 
         self.parent = super()
         self.parent.__init__()
@@ -155,11 +159,11 @@ class CustomGridLayout(QGridLayout):
 
         current = [] # 2d list of current plots being shown
 
-        labels = [str(d[0]) for d in possPlotData] # Extracts the names of the graphs for the dropdown menu
+        labels = [str(d[0]) for d in plotDataProcesses] # Extracts the names of the graphs for the dropdown menu
 
         # Sets maximum number of plots that can be shown at once, one column can't ever show more than half the graphs or more than 8 graphs
         normalMaxNumPlots = 8
-        maxNumPlots = min(normalMaxNumPlots, int(len(possPlotData) / 2))
+        maxNumPlots = min(normalMaxNumPlots, int(len(plotDataProcesses) / 2))
 
         # Creates intial plots and puts them into the PlotColumn objects
 
@@ -173,9 +177,9 @@ class CustomGridLayout(QGridLayout):
             defaultPlotDropdownsSublist = []
 
             for plotNum in column:
-                currentSublist.append(possPlotData[plotNum])
+                currentSublist.append(plotDataProcesses[plotNum])
 
-                plot = guiPlots.CustomPlotWidget(running, possPlotData[plotNum][1], possPlotData[plotNum][0]) # Creates plot widget from a DataProcess
+                plot = guiPlots.CustomPlotWidget(running, plotDataProcesses[plotNum][1], plotDataProcesses[plotNum][0]) # Creates plot widget from a DataProcess
                 plot.startRedraw()
                 defaultPlotsSublist.append(plot)
 
@@ -192,8 +196,8 @@ class CustomGridLayout(QGridLayout):
         plotColumn0 = guiPlots.PlotColumn(defaultPlots[0], 0, maxNumPlots) # Creates a plot column from a list of plots, an index and the max number of plots
         plotColumn1 = guiPlots.PlotColumn(defaultPlots[1], 1, maxNumPlots)
 
-        columnDropdowns0 = guiOptions.ColumnDropdowns(running, defaultPlotDropdowns[0], plotColumn0, possPlotData, labels, current, maxNumPlots)
-        columnDropdowns1 = guiOptions.ColumnDropdowns(running, defaultPlotDropdowns[1], plotColumn1, possPlotData, labels, current, maxNumPlots)
+        columnDropdowns0 = guiOptions.ColumnDropdowns(running, defaultPlotDropdowns[0], plotColumn0, plotDataProcesses, labels, current, maxNumPlots)
+        columnDropdowns1 = guiOptions.ColumnDropdowns(running, defaultPlotDropdowns[1], plotColumn1, plotDataProcesses, labels, current, maxNumPlots)
 
         columnDropdownsLayout = QVBoxLayout()
         columnDropdownsLayout.addWidget(columnDropdowns0)
@@ -216,7 +220,7 @@ class CustomGridLayout(QGridLayout):
         startStop = guiOptions.StartStop(running, connectionPipe, saveDataMenuButton, chatWindow, regDump)
         cueSystemButton = guiCue.CueSystemButton(running, startStop)
 
-        xAxisResizer = guiOptions.XAxisResizer(possPlotData, xAxisLength)
+        xAxisResizer = guiOptions.XAxisResizer(plotDataProcesses, xAxisLength)
 
         layoutSaver = guiOptions.LayoutSaver(configFilename, columnDropdowns0, columnDropdowns1, chatWindow)
 

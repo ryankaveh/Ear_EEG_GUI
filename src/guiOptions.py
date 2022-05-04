@@ -47,7 +47,7 @@ class StartStop(QWidget):
     
     def start(self):
 
-        self.chatWindow.commandWriter.sendStreamCommand()
+        self.chatWindow.commandWriter.sendStartCommand()
 
         self.running.value = True
         self.saveDataMenuButton.setChangeable(False)
@@ -75,7 +75,7 @@ class StartStop(QWidget):
         if self.synced:
             self.cueSystem.stopTest()
 
-        self.chatWindow.commandWriter.sendStreamCommand()
+        self.chatWindow.commandWriter.sendStopCommand()
 
         self.chatWindow.addMessage("Streaming Stopped")
 
@@ -217,9 +217,13 @@ class CommandWriter(QWidget):
         else:
             self.chatWindow.addMessage("Please Connect to a Device First")
         
-    def sendStreamCommand(self):
+    def sendStartCommand(self):
 
-        self.commandWriterPipe.send("stream")
+        self.commandWriterPipe.send("start")
+
+    def sendStopCommand(self):
+
+        self.commandWriterPipe.send("stop")
 
     def sendRegReadCommand(self, regNum): # regNum should be a 2 digit string 00-99
 
@@ -252,11 +256,11 @@ class CommandWriter(QWidget):
 
 class XAxisResizer(QWidget):
 
-    def __init__(self, possPlotData, currXAxisLength):
+    def __init__(self, plotDataProcesses, currXAxisLength):
 
         super().__init__()
 
-        self.possPlotData = possPlotData
+        self.plotDataProcesses = plotDataProcesses
         self.currXAxisLength = currXAxisLength
 
         layout = QHBoxLayout()
@@ -275,7 +279,7 @@ class XAxisResizer(QWidget):
     def resize(self):
 
         newLength = int(self.xAxisLength.text())
-        for dataProcess in self.possPlotData:
+        for dataProcess in self.plotDataProcesses:
             dataProcess[1].resizeXAxis(newLength)
 
 class LayoutSaver(QWidget):
@@ -360,14 +364,14 @@ class RegDump(QWidget):
 # Class containing all of the dropdown menues corrosponding to a certain PlotColumn
 class ColumnDropdowns(QWidget):
 
-    def __init__(self, running, startingDropdowns, plotColumn, possPlotData, lables, current, maxNumPlots):
+    def __init__(self, running, startingDropdowns, plotColumn, plotDataProcesses, lables, current, maxNumPlots):
 
         super().__init__()
 
         self.running = running
         self.dropdowns = startingDropdowns
         self.plotColumn = plotColumn # PlotColumn that corrosponds to this set of dropdown menus
-        self.possPlotData = possPlotData
+        self.plotDataProcesses = plotDataProcesses
         self.lables = lables
         self.current = current
         self.maxNumPlots = maxNumPlots
@@ -385,7 +389,7 @@ class ColumnDropdowns(QWidget):
 
         # Uses lambda function to connect each intial dropdown to changePlotHelper with the right parameters and then adds it to the layout
         for idx, drop in enumerate(self.dropdowns):
-            drop.currentIndexChanged.connect(lambda possPlotDataIdx, plotIdx=idx: self.changePlotHelper(possPlotDataIdx, plotIdx))
+            drop.currentIndexChanged.connect(lambda plotDataProcessesIdx, plotIdx=idx: self.changePlotHelper(plotDataProcessesIdx, plotIdx))
             self.layout.addWidget(drop, 1)
         
         # Fills dropdowns list so that indexing outside of the current self.numPlots value can be done
@@ -424,7 +428,7 @@ class ColumnDropdowns(QWidget):
             indices = [] # Used to set the intial value of the dropdown menus
             idx = 0
             while len(newPlots) < sizeDiff:
-                possData = self.possPlotData[idx]
+                possData = self.plotDataProcesses[idx]
                 exists = False
                 for col in self.current:
                     if possData in col:
@@ -441,7 +445,7 @@ class ColumnDropdowns(QWidget):
                 newDrop = QComboBox()
                 newDrop.addItems(self.lables)
                 newDrop.setCurrentIndex(indices[idx - self.numPlots])
-                newDrop.currentIndexChanged.connect(lambda possPlotDataIdx, plotIdx=idx: self.changePlotHelper(possPlotDataIdx, plotIdx))
+                newDrop.currentIndexChanged.connect(lambda plotDataProcessesIdx, plotIdx=idx: self.changePlotHelper(plotDataProcessesIdx, plotIdx))
 
                 self.dropdowns[idx] = newDrop
                 self.layout.addWidget(self.dropdowns[idx], 1)
@@ -451,9 +455,9 @@ class ColumnDropdowns(QWidget):
         self.numPlots = newSize
     
     # Called when the user changes any of the plots with the dropdown menu
-    def changePlotHelper(self, possPlotDataIdx, plotIdx):
+    def changePlotHelper(self, plotDataProcessesIdx, plotIdx):
 
-        newPlotData = self.possPlotData[possPlotDataIdx]
+        newPlotData = self.plotDataProcesses[plotDataProcessesIdx]
 
         # Checks if the desired plot already exists anywhere on screen
         exists = False
@@ -475,7 +479,7 @@ class ColumnDropdowns(QWidget):
             # Updates the secondary dropdown menu to the correct value
             secondaryDrop = secondary.dropdowns[oldSecondaryLoc]
             secondaryDrop.blockSignals(True)
-            secondaryDrop.setCurrentIndex(self.possPlotData.index(self.current[self.screenIdx][plotIdx]))
+            secondaryDrop.setCurrentIndex(self.plotDataProcesses.index(self.current[self.screenIdx][plotIdx]))
             secondaryDrop.blockSignals(False)
 
             # Updates the current

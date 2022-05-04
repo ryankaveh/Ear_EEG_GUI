@@ -116,13 +116,13 @@ class CustomPlotWidget(PlotWidget):
 # Abstract class defining methods needed in all data processes, each distinct graph will have an implementation of this
 class DataProcess():
 
-    def __init__(self, running, channelData, x, y, xAxisLength, counter):
+    def __init__(self, running, channelData, x, y, xAxisLength):
 
         self.running = running
         self.channelData = channelData
         self.xAxisLength = xAxisLength
         self.currPacket = -1
-        self.counter = counter # Starts at -1
+        self.counter = -1 # Determines values on graph X axis, starts at -1 as first packet is (theoretically, usually not actually) 0
 
         # These must be multiprocessing sync manager arrays so the data can be shared back to the process drawing the graphs
         self.x = x
