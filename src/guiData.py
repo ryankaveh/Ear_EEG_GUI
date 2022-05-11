@@ -50,11 +50,8 @@ class SerialReader():
                 self.serialGUISide.write((command + " \n").encode())
                 if command == "start" or command == "stop":
                     self.commandMode = (command == "stop")
-                    sleep(0.1)
+                    sleep(0.5)
                     # print(self.serialGUISide.in_waiting)
-                    if self.serialGUISide.in_waiting < 6:
-                        print("1")
-                        print(self.serialGUISide.send_break())
                     # print("here")
                     # self.serialGUISide.reset_input_buffer()
             
