@@ -70,8 +70,10 @@ class MainWindow(QMainWindow):
             lock = mp.RLock()
             channelDataArr.append(mp.Value(guiData.ChannelData, 0, 0, 0, 0, lock=lock))
 
-        self.manager = mp.Manager() # Manager used to spawn all multiprocessing processes and generate multiprocessing objects
-        saveDataQueue = self.manager.Queue() # This queue is used to send data from the SerialReader to the SaveDataWriter
+        self.manager1 = mp.Manager() # Manager used to spawn all multiprocessing processes and generate multiprocessing objects
+        self.manager2 = mp.Manager()
+        self.manager3 = mp.Manager()
+        saveDataQueue = self.manager1.Queue() # This queue is used to send data from the SerialReader to the SaveDataWriter
 
         connectionPipe, sRConnectionPipe = mp.Pipe() # Sends a 1 to let main processes know that the device is successfully connected
         commandWriterPipe, sRCommandWriterPipe = mp.Pipe() # Used to send commands from the chat window (main process) to the SerialReader (handles chip interactions)
@@ -88,8 +90,8 @@ class MainWindow(QMainWindow):
 
         self.processes = [] # Contains all post-processing processes (which then send data to their corresponding graph)
         for i in range(numChannels): # Each channel has three different post-processes applied
-            managedX = self.manager.list() # List of the most recent X values, updated by data process then used by the graph
-            managedY = self.manager.list() # List of the most recent X values, updated by data process then used by the graph
+            managedX = self.manager1.list() # List of the most recent X values, updated by data process then used by the graph
+            managedY = self.manager1.list() # List of the most recent X values, updated by data process then used by the graph
             managedAxisLen = mp.Value('i', xAxisLength) # Shared xAxis length between main process (updates this value) and data process (uses this value)
             eegDataProcess = guiPlots.EEGDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen)
             p = mp.Process(target=eegDataProcess.startUpdateData) # Starts the while loop that will check for new data
@@ -99,8 +101,8 @@ class MainWindow(QMainWindow):
 
             plotDataProcesses.append(("Ch " + str(i) + " EEG", eegDataProcess)) # Adds name and data process to the possible graphs
 
-            managedX = self.manager.list()
-            managedY = self.manager.list()
+            managedX = self.manager2.list()
+            managedY = self.manager2.list()
             managedAxisLen = mp.Value('i', xAxisLength)
             iQMagDataProcess = guiPlots.IQMagDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen)
             p = mp.Process(target=iQMagDataProcess.startUpdateData)
@@ -110,8 +112,8 @@ class MainWindow(QMainWindow):
 
             plotDataProcesses.append(("Ch " + str(i) + " mag(I&Q)", iQMagDataProcess))
 
-            managedX = self.manager.list()
-            managedY = self.manager.list()
+            managedX = self.manager3.list()
+            managedY = self.manager3.list()
             managedAxisLen = mp.Value('i', xAxisLength)
             iQPhaseDataProcess = guiPlots.IQPhaseDataProcess(running, channelDataArr[i % numChannels], managedX, managedY, managedAxisLen)
             p = mp.Process(target=iQPhaseDataProcess.startUpdateData)
@@ -137,7 +139,7 @@ class MainWindow(QMainWindow):
                 configWriter.writerows(plotLayout)
 
 
-        layout = CustomGridLayout(running, numChannels, plotDataProcesses, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename, self.manager)
+        layout = CustomGridLayout(running, numChannels, plotDataProcesses, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename)
 
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
@@ -150,12 +152,12 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, running, numChannels, plotDataProcesses, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename, manager):
+    def __init__(self, running, numChannels, plotDataProcesses, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename):
 
         self.parent = super()
         self.parent.__init__()
 
-        self.manager = manager # This might have help the "AttributeError: 'ForkAwareLocal' object has no attribute 'connection'" error but idk
+        # self.manager = manager # This might have help the "AttributeError: 'ForkAwareLocal' object has no attribute 'connection'" error but idk
 
         current = [] # 2d list of current plots being shown
 

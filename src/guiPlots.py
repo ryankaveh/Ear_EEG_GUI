@@ -89,12 +89,10 @@ class CustomPlotWidget(PlotWidget):
 
         self.setMouseEnabled(x=False, y=False) # Removes ability to drag graph with mouse
 
-        with self.dataProcess.lock:
-                x = self.dataProcess.x[:]
-                y = self.dataProcess.y[:]
-        # x, y = self.dataProcess.getData()
+        xStart = list(range(-self.dataProcess.xAxisLength.value, 0))
+        yStart = [0] * self.dataProcess.xAxisLength.value
 
-        self.data_line = self.plot(x, y, pen=self.pen)
+        self.data_line = self.plot(xStart, yStart, pen=self.pen)
 
     # Starts the redrawing of the plot every 'refreshRate' millseconds
     def startRedraw(self):
@@ -106,8 +104,8 @@ class CustomPlotWidget(PlotWidget):
 
     # Redraws plot with data recived from dataProcess
     def redrawPlot(self):
+
         if bool(self.running.value):
-            # x, y = self.dataProcess.getData()
             with self.dataProcess.lock:
                 x = self.dataProcess.x[:]
                 y = self.dataProcess.y[:]
@@ -135,7 +133,7 @@ class DataProcess():
 
     # Starts a loop to call the updateData function 
     def startUpdateData(self):
-        
+
         while True:
             if bool(self.running.value):
                 self.updateData()
@@ -162,10 +160,9 @@ class DataProcess():
         currXAxisLength = self.xAxisLength.value
         if newXAxisLength > currXAxisLength:
             diff = newXAxisLength - currXAxisLength
-            currEnd = self.counter + 1 - currXAxisLength
 
             with self.lock:
-                self.x[:] = list(range(currEnd - diff, currEnd)) + self.x[:]
+                self.x[:] = list(range(self.x[0] - diff, self.x[0])) + self.x[:]
                 self.y[:] = ([0] * diff) + self.y[:]
 
             with self.xAxisLength:
