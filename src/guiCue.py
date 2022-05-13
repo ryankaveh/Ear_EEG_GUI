@@ -369,8 +369,8 @@ class CueSystem(QWidget):
             whiteNoisePiece = np.tile(whiteNoise, numRepeats)
             fullSound = (self.carrierAmp + self.modAmp * amPiece * whiteNoisePiece).astype(np.float32)
 
-        # Start playback
-        sa.play_buffer(fullSound, 1, 4, samplingFreq)
+            # Start playback
+            sa.play_buffer(fullSound, 1, 4, samplingFreq)
 
 class CuePrompt(QWidget):
 

@@ -6,8 +6,6 @@ from ctypes import Structure, c_ubyte, c_short, c_int
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QCheckBox, QLineEdit
 from PyQt5.QtCore import QTimer
 
-from serial.tools import list_ports
-
 class SerialReader():
 
     def __init__(self, port, numChannels, channelDataArr, saveDataQueue, connectionPipe, commandWriterPipe, commandResponsePipe):
@@ -32,7 +30,7 @@ class SerialReader():
             try:
                 # Connection is in startSerialReader because otherwise it doesn't really work with the multiprocessing
                 # self.serialGUISide = serial.Serial(self.port, 9600, rtscts=True, dsrdtr=True) # Uncomment for emulator
-                self.serialGUISide = serial.Serial(self.port, 115200, rtscts=True, dsrdtr=True)
+                self.serialGUISide = serial.Serial(self.port, 115200, rtscts=True)
             except:
                 pass
 
@@ -50,10 +48,10 @@ class SerialReader():
                 self.serialGUISide.write((command + " \n").encode())
                 if command == "start" or command == "stop":
                     self.commandMode = (command == "stop")
-                    sleep(0.5)
-                    # print(self.serialGUISide.in_waiting)
-                    # print("here")
-                    # self.serialGUISide.reset_input_buffer()
+                elif command == "pyserialReset":
+                    self.serialGUISide.close()
+                    self.serialGUISide = serial.Serial(self.port, 115200, rtscts=True)
+                    self.serialGUISide.reset_output_buffer()
             
     def updateData(self):
 
@@ -70,7 +68,6 @@ class SerialReader():
                 # self.serialGUISide.reset_input_buffer() # Currently throws away text responses as they aren't consistent enought to deal with
 
         elif self.serialGUISide.in_waiting > 0:
-            print(self.serialGUISide.in_waiting)
             if self.serialGUISide.in_waiting < 6:
                 self.serialGUISide.reset_input_buffer()
 

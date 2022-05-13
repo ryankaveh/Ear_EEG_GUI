@@ -226,6 +226,8 @@ class CustomGridLayout(QGridLayout):
 
         layoutSaver = guiOptions.LayoutSaver(configFilename, columnDropdowns0, columnDropdowns1, chatWindow)
 
+        resetButton = guiOptions.PyserialReset(running, startStop, connectionPipe, chatWindow)
+
         optionsRowLayout = QHBoxLayout()
         optionsRowLayout.addWidget(saveDataMenuButton)
         optionsRowLayout.addWidget(cueSystemButton)
@@ -233,6 +235,7 @@ class CustomGridLayout(QGridLayout):
         optionsRowLayout.addWidget(xAxisResizer)
         optionsRowLayout.addWidget(layoutSaver)
         optionsRowLayout.addWidget(regDump)
+        optionsRowLayout.addWidget(resetButton)
 
         optionsLayout = QVBoxLayout()
         optionsLayout.addLayout(optionsRowLayout)
@@ -249,7 +252,7 @@ class CustomGridLayout(QGridLayout):
 
         current.append([columnDropdowns0, columnDropdowns1]) # Last item in current is list of ColumnDropdowns so they can reference each other
 
-        sleep(1) # Program has to wait for other processes to connect to device before checking
+        sleep(2) # Program has to wait for other processes to connect to device before checking
         # 1s wait seems to work but if auto connection is failing but manually connecting works, try making the sleep longer
         startStop.connect("Automatic Connection Attempt Failed") # Automatically clicks "connect" button, gives unique error message on failure
         

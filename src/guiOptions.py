@@ -225,6 +225,10 @@ class CommandWriter(QWidget):
 
         self.commandWriterPipe.send("stop")
 
+    def sendPyserialResetCommand(self):
+
+        self.commandWriterPipe.send("pyserialReset")
+
     def sendRegReadCommand(self, regNum): # regNum should be a 2 digit string 00-99
 
         self.commandWriterPipe.send("read reg " + regNum)
@@ -492,3 +496,34 @@ class ColumnDropdowns(QWidget):
             newPlot.startRedraw()
             self.plotColumn.swapOutPlot(plotIdx, newPlot)
             self.current[self.plotColumn.getScreenIdx()][plotIdx] = newPlotData
+
+class PyserialReset(QWidget):
+
+    def __init__(self, running, startStop, connectionPipe, chatWindow):
+
+        super().__init__()
+
+        self.running = running
+        self.startStop = startStop
+        self.connectionPipe = connectionPipe
+        self.chatWindow = chatWindow
+
+        layout = QHBoxLayout()
+
+        self.resetButton = QPushButton("Reset")
+        self.resetButton.clicked.connect(self.reset)
+
+        layout.addWidget(self.resetButton)
+
+        self.setLayout(layout)
+
+    def reset(self):
+
+        if self.running.value:
+            self.startStop.stop()
+
+        self.chatWindow.commandWriter.sendPyserialResetCommand()
+        self.chatWindow.addMessage("Pyserial Connection Reset")
+
+
+        
