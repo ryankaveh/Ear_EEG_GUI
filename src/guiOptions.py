@@ -524,6 +524,8 @@ class PyserialReset(QWidget):
 
         self.chatWindow.commandWriter.sendPyserialResetCommand()
         self.chatWindow.addMessage("Pyserial Connection Reset")
+        sleep(0.5) # This should work as the commands will just be queued until the reset is finished
+        self.chatWindow.commandWriter.runStartupCommands() # These will run whether or not the reset is able to reestablish communication
 
 
         

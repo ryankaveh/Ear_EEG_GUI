@@ -46,13 +46,39 @@ class SerialReader():
                 command = self.commandWriterPipe.recv().strip()
                 print("Writing " + command + " to chip")
                 self.serialGUISide.write((command + " \n").encode())
-                if command == "start" or command == "stop":
-                    self.commandMode = (command == "stop")
+                if command == "start":
+                    self.commandMode = False
+                elif command == "stop":
+                    self.commandMode = True
+                    sleep(0.5)
+                    self.serialGUISide.reset_input_buffer()
                 elif command == "pyserialReset":
                     self.serialGUISide.close()
                     self.serialGUISide = serial.Serial(self.port, 115200, rtscts=True)
                     self.serialGUISide.reset_output_buffer()
-            
+                    self.serialGUISide.reset_input_buffer()
+
+                    self.serialGUISide.write(("single \n").encode())
+                    print("Connection reset, writing single to chip and looking for response")
+                    sleep(0.1)
+
+                    if self.serialGUISide.in_waiting == 0:
+                        print("No response, resetting again")
+                        self.serialGUISide.close()
+                        self.serialGUISide = serial.Serial(self.port, 115200, rtscts=True)
+                        self.serialGUISide.reset_output_buffer()
+                        self.serialGUISide.reset_input_buffer()
+                        self.serialGUISide.write(("single \n").encode())
+                        print("Connection reset, writing single to chip and looking for response")
+                        sleep(0.1)
+
+                        if self.serialGUISide.in_waiting == 0:
+                            print("No response, connection reestablishment failure")
+
+                    if self.serialGUISide.in_waiting > 0:
+                        print("Response obtained, connection reestablishment success")
+                        self.serialGUISide.reset_input_buffer()
+
     def updateData(self):
 
         if self.commandMode:
@@ -61,11 +87,11 @@ class SerialReader():
                 sleep(0.1) # Make sure full response is transmitted
                 val = b''
                 val += self.serialGUISide.read(self.serialGUISide.in_waiting)
-                # print("Chip response: " + val.decode())
                 print("Chip response: " + str(val.hex()))
-                # self.commandResponsePipe.send("Chip: " + val.decode())
                 self.commandResponsePipe.send("Chip: " + str(val.hex()))
-                # self.serialGUISide.reset_input_buffer() # Currently throws away text responses as they aren't consistent enought to deal with
+                # print("Chip response: " + val.decode())
+                # self.commandResponsePipe.send("Chip: " + val.decode())
+                
 
         elif self.serialGUISide.in_waiting > 0:
             if self.serialGUISide.in_waiting < 6:
@@ -85,10 +111,10 @@ class SerialReader():
                 chxQ = int.from_bytes(val[i+6:i+8], "big", signed=True)
 
                 with self.channelDataArr[idx].get_lock():
+                    self.channelDataArr[idx].packetId = packetId
                     self.channelDataArr[idx].chxEEG = chxEEG
                     self.channelDataArr[idx].chxI = chxI
                     self.channelDataArr[idx].chxQ = chxQ
-                    self.channelDataArr[idx].packetId = packetId
                 idx += 1
 
                 saveData.extend((chxEEG, chxI, chxQ))
