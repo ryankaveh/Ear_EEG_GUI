@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
             channelDataArr.append(mp.Value(guiData.ChannelData, 0, 0, 0, 0, lock=lock))
 
         self.manager1 = mp.Manager() # Manager used to spawn all multiprocessing processes and generate multiprocessing objects
-        self.manager2 = mp.Manager()
+        self.manager2 = mp.Manager() # Managers have an internal limit on how many objects they can generate simultaneously, multiple need to avoid occasional crashes
         self.manager3 = mp.Manager()
         saveDataQueue = self.manager1.Queue() # This queue is used to send data from the SerialReader to the SaveDataWriter
 
@@ -86,7 +86,7 @@ class MainWindow(QMainWindow):
         self.serialReaderProcess.daemon = True
         self.serialReaderProcess.start()
 
-        xAxisLength = 100 # Default length of the xAxis
+        xAxisLength = 100 # Default length of the xAxis, repersents number of packets so depending on what % of packets of graphed, corresponding time changes
 
         self.processes = [] # Contains all post-processing processes (which then send data to their corresponding graph)
         for i in range(numChannels): # Each channel has three different post-processes applied
@@ -123,8 +123,8 @@ class MainWindow(QMainWindow):
 
             plotDataProcesses.append(("Ch " + str(i) + " phase(I&Q)", iQPhaseDataProcess))
 
-        plotLayout = [] # 2d array list with two inner arrays, each repersenting one of the plot columns, inside inner arrays are the numbers corresponding with which graph to show
-        if os.path.exists(configFilename):
+        plotLayout = [] # 2d array containing arrays representing each column, inside inner arrays are the numbers corresponding with which graph to show
+        if os.path.exists(configFilename): # If a config file exists this block will load it and arrange the plots accordingly
             print("Loading Config")
             with open(configFilename, 'r') as config:
                 configReader = reader(config) # CSV reader
@@ -133,17 +133,17 @@ class MainWindow(QMainWindow):
 
         if (not os.path.exists(configFilename)) or (not len(plotLayout) == 2): # There are two columns, this needs to be changed if the number of columns changes
             print("Config Missing or Broken, Regenerating")
-            plotLayout = [[0,1],[2,3]]
+            plotLayout = [[0,1],[2,3]] # Default plot layout shows these four plots in a 2x2
             with open(configFilename, 'w') as config:
                 configWriter = writer(config) # CSV writer
                 configWriter.writerows(plotLayout)
 
+        # Layout of the main window, used to create all the graphs and UI elements
+        layout = CustomGridLayout(running, numChannels, plotDataProcesses, plotLayout, configFilename, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename)
 
-        layout = CustomGridLayout(running, numChannels, plotDataProcesses, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename)
-
+        # Puts the graphs and UI into the main window for display
         mainWidget = QWidget()
         mainWidget.setLayout(layout)
-
         self.setCentralWidget(mainWidget)
 
     def closeEvent(self, _):
@@ -152,54 +152,50 @@ class MainWindow(QMainWindow):
 
 class CustomGridLayout(QGridLayout):
 
-    def __init__(self, running, numChannels, plotDataProcesses, plotLayout, configFilename, serialReader, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename):
+    def __init__(self, running, numChannels, plotDataProcesses, plotLayout, configFilename, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename):
 
-        self.parent = super()
+        self.parent = super() # Needed later to add elements to layout
         self.parent.__init__()
 
-        # self.manager = manager # This might have help the "AttributeError: 'ForkAwareLocal' object has no attribute 'connection'" error but idk
-
-        current = [] # 2d list of current plots being shown
-
+        
         labels = [str(d[0]) for d in plotDataProcesses] # Extracts the names of the graphs for the dropdown menu
 
         # Sets maximum number of plots that can be shown at once, one column can't ever show more than half the graphs or more than 8 graphs
         normalMaxNumPlots = 8
         maxNumPlots = min(normalMaxNumPlots, int(len(plotDataProcesses) / 2))
 
-        # Creates intial plots and puts them into the PlotColumn objects
+        current = [] # 2d array containing arrays representing each column, contains current plot data process objects being shown, used to update plots from dropdown menu
+        initalPlots = [] # 2d array containing arrays representing each column, used to fill plot columns with intial plot objects
+        plotDropdowns = [] # 2d array containing arrays representing each column, contains dropdown menus corresponding with each graph containing all graph options
 
-        defaultPlots = []
-        defaultPlotDropdowns = []
-
-        # There isn't much error checking for the layout, if layout is causing issues here, delete layout file
-        for column in plotLayout:
+        for column in plotLayout: 
+            # Each sublist repersents a column
             currentSublist = []
-            defaultPlotsSublist = []
-            defaultPlotDropdownsSublist = []
+            initalPlotsSublist = []
+            plotDropdownsSublist = []
 
             for plotNum in column:
                 currentSublist.append(plotDataProcesses[plotNum])
 
                 plot = guiPlots.CustomPlotWidget(running, plotDataProcesses[plotNum][1], plotDataProcesses[plotNum][0]) # Creates plot widget from a DataProcess
                 plot.startRedraw()
-                defaultPlotsSublist.append(plot)
+                initalPlotsSublist.append(plot)
 
                 dd = QComboBox() # Creates the starting dropdown menue
                 dd.addItems(labels) # Adds the graph names to the dropdown menu
                 dd.setCurrentIndex(plotNum) # Sets the item that it should start on, must come before connecting 'currentIndexChanged'
-                defaultPlotDropdownsSublist.append(dd)
+                plotDropdownsSublist.append(dd)
 
             current.append(currentSublist)
-            defaultPlots.append(defaultPlotsSublist)
-            defaultPlotDropdowns.append(defaultPlotDropdownsSublist)
+            initalPlots.append(initalPlotsSublist)
+            plotDropdowns.append(plotDropdownsSublist)
                 
 
-        plotColumn0 = guiPlots.PlotColumn(defaultPlots[0], 0, maxNumPlots) # Creates a plot column from a list of plots, an index and the max number of plots
-        plotColumn1 = guiPlots.PlotColumn(defaultPlots[1], 1, maxNumPlots)
+        plotColumn0 = guiPlots.PlotColumn(initalPlots[0], 0, maxNumPlots) # Creates a plot column from a list of plots, an index and the max number of plots
+        plotColumn1 = guiPlots.PlotColumn(initalPlots[1], 1, maxNumPlots)
 
-        columnDropdowns0 = guiOptions.ColumnDropdowns(running, defaultPlotDropdowns[0], plotColumn0, plotDataProcesses, labels, current, maxNumPlots)
-        columnDropdowns1 = guiOptions.ColumnDropdowns(running, defaultPlotDropdowns[1], plotColumn1, plotDataProcesses, labels, current, maxNumPlots)
+        columnDropdowns0 = guiOptions.ColumnDropdowns(running, plotDropdowns[0], plotColumn0, plotDataProcesses, labels, current, maxNumPlots)
+        columnDropdowns1 = guiOptions.ColumnDropdowns(running, plotDropdowns[1], plotColumn1, plotDataProcesses, labels, current, maxNumPlots)
 
         columnDropdownsLayout = QVBoxLayout()
         columnDropdownsLayout.addWidget(columnDropdowns0)
@@ -253,7 +249,7 @@ class CustomGridLayout(QGridLayout):
         current.append([columnDropdowns0, columnDropdowns1]) # Last item in current is list of ColumnDropdowns so they can reference each other
 
         sleep(2) # Program has to wait for other processes to connect to device before checking
-        # 1s wait seems to work but if auto connection is failing but manually connecting works, try making the sleep longer
+        # 2s wait seems to work but if auto connection is failing but manually connecting works, try making the sleep longer
         startStop.connect("Automatic Connection Attempt Failed") # Automatically clicks "connect" button, gives unique error message on failure
         
 
