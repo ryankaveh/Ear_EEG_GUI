@@ -10,21 +10,10 @@ import guiData
 import guiOptions
 import guiPlots
 
-###
-# Known Issues:
-#
-# AttributeError: 'ForkAwareLocal' object has no attribute 'connection' appears to be something with the sync manager shutting down? Or maybe too many simultaneous manager reads? 
-# A rare error but problematic. 
-# Maybe something to do when packet ids are the same, error creating same packet id triggers this on some processes (not all) every time
-# 
-# Clean Code
-#   TODOS
-#   Comments + documentation
-# Testing
-# Split mac/windows
-###
+# The main window of the GUI, doesn't include the layout and elements inside
 class MainWindow(QMainWindow):
 
+    # Performs most non-gui/visual startup tasks
     def __init__(self, commandLinePort):
 
         super().__init__()
@@ -146,12 +135,15 @@ class MainWindow(QMainWindow):
         mainWidget.setLayout(layout)
         self.setCentralWidget(mainWidget)
 
+    # Function called on close of the main window
     def closeEvent(self, _):
 
         QApplication.closeAllWindows() # Used to close any extra windows (such as cue or save data) that may have been opened
 
+# The layout that fills the main window
 class CustomGridLayout(QGridLayout):
 
+    # Performs most gui-based/visual startup tasks
     def __init__(self, running, numChannels, plotDataProcesses, plotLayout, configFilename, connectionPipe, commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe, saveDataQueue, xAxisLength, regDumpFilename):
 
         self.parent = super() # Needed later to add elements to layout
@@ -174,56 +166,64 @@ class CustomGridLayout(QGridLayout):
             initalPlotsSublist = []
             plotDropdownsSublist = []
 
-            for plotNum in column:
-                currentSublist.append(plotDataProcesses[plotNum])
+            for plotNum in column: # This iterates through every plot that is to be shown on the inital layout
+                currentSublist.append(plotDataProcesses[plotNum]) # Keeps track of the corresponding data process for later use by the dropdown menu
 
-                plot = guiPlots.CustomPlotWidget(running, plotDataProcesses[plotNum][1], plotDataProcesses[plotNum][0]) # Creates plot widget from a DataProcess
-                plot.startRedraw()
-                initalPlotsSublist.append(plot)
+                plot = guiPlots.CustomPlotWidget(running, plotDataProcesses[plotNum][1], plotDataProcesses[plotNum][0]) # Creates the plot from a DataProcess
+                plot.startRedraw() # This function allows for the plot to update later when the start button is clicked
+                initalPlotsSublist.append(plot) # Appends it to inital plots to be shown on screen
 
                 dd = QComboBox() # Creates the starting dropdown menue
                 dd.addItems(labels) # Adds the graph names to the dropdown menu
                 dd.setCurrentIndex(plotNum) # Sets the item that it should start on, must come before connecting 'currentIndexChanged'
-                plotDropdownsSublist.append(dd)
+                plotDropdownsSublist.append(dd) # Appends it to plot dropdowns to be shown on screen
 
+            # Adds column worth of info to each overarching list
             current.append(currentSublist)
             initalPlots.append(initalPlotsSublist)
             plotDropdowns.append(plotDropdownsSublist)
                 
-
-        plotColumn0 = guiPlots.PlotColumn(initalPlots[0], 0, maxNumPlots) # Creates a plot column from a list of plots, an index and the max number of plots
+        # Creates a plot column from a list of plots, an index and the max number of plots
+        plotColumn0 = guiPlots.PlotColumn(initalPlots[0], 0, maxNumPlots)
         plotColumn1 = guiPlots.PlotColumn(initalPlots[1], 1, maxNumPlots)
 
+        # Creates a section of dropdown menus corresponding to the plot column, allows for the user to select plots and UI to show correct plots
         columnDropdowns0 = guiOptions.ColumnDropdowns(running, plotDropdowns[0], plotColumn0, plotDataProcesses, labels, current, maxNumPlots)
         columnDropdowns1 = guiOptions.ColumnDropdowns(running, plotDropdowns[1], plotColumn1, plotDataProcesses, labels, current, maxNumPlots)
 
+        # Stacks the two column dropdown sections together vertically
         columnDropdownsLayout = QVBoxLayout()
         columnDropdownsLayout.addWidget(columnDropdowns0)
         columnDropdownsLayout.addWidget(columnDropdowns1)
 
+        # Stacks the two plot columns together horizontally
         combindedPlotColumnLayout = QHBoxLayout()
         combindedPlotColumnLayout.addWidget(plotColumn0)
         combindedPlotColumnLayout.addWidget(plotColumn1)
 
-        saveDataMenuButton = guiData.SaveDataMenuButton(running)
+        saveDataMenuButton = guiData.SaveDataMenuButton(running) # Creates the button used to pull up all data saving options
 
-        saveDataWriter = guiData.SaveDataWriter(running, numChannels, saveDataQueue, saveDataMenuButton)
-        saveDataWriter.startSaveDataWriter() # Not in its own process as implmentation would be complicated and it is the only demanding task on the main proces
+        # Creates object used to actually save the data, is a QWidget to be included in gui update loop, this also means it has to be created here so it can be added to the UI (below)
+        saveDataWriter = guiData.SaveDataWriter(running, numChannels, saveDataQueue, saveDataMenuButton) 
+        saveDataWriter.startSaveDataWriter() # Not in its own process as implmentation would be complicated and it is the only demanding task on the main proces, prepares object to save data
 
+        # Creates chat window with connections needed to send/recive data to/from chip and starts update to look for such data
         chatWindow = guiOptions.ChatWindow(commandWriterPipe, startupCommandsFilename, sRCommandResponsePipe)
         chatWindow.startUpdate()
 
-        regDump = guiOptions.RegDump(regDumpFilename, chatWindow)
+        regDump = guiOptions.RegDump(regDumpFilename, chatWindow) # Creates button to dump all registers to specified file
 
-        startStop = guiOptions.StartStop(running, connectionPipe, saveDataMenuButton, chatWindow, regDump)
-        cueSystemButton = guiCue.CueSystemButton(running, startStop)
+        startStop = guiOptions.StartStop(running, connectionPipe, saveDataMenuButton, chatWindow, regDump) # Creates buttons to start/stop data stream
 
-        xAxisResizer = guiOptions.XAxisResizer(plotDataProcesses, xAxisLength)
+        cueSystemButton = guiCue.CueSystemButton(running, startStop) # Creates button to pull up cue system menu
 
-        layoutSaver = guiOptions.LayoutSaver(configFilename, columnDropdowns0, columnDropdowns1, chatWindow)
+        xAxisResizer = guiOptions.XAxisResizer(plotDataProcesses, xAxisLength) # Creates area to resize x axis
 
-        resetButton = guiOptions.PyserialReset(running, startStop, connectionPipe, chatWindow)
+        layoutSaver = guiOptions.LayoutSaver(configFilename, columnDropdowns0, columnDropdowns1, chatWindow) # Creates button to save current layout
 
+        resetButton = guiOptions.PyserialReset(running, startStop, connectionPipe, chatWindow) # Creates button to reset pyserial connection
+
+        # All options buttons added into a row together
         optionsRowLayout = QHBoxLayout()
         optionsRowLayout.addWidget(saveDataMenuButton)
         optionsRowLayout.addWidget(cueSystemButton)
@@ -233,14 +233,17 @@ class CustomGridLayout(QGridLayout):
         optionsRowLayout.addWidget(regDump)
         optionsRowLayout.addWidget(resetButton)
 
+        # Adds together options buttons and column dropdowns
         optionsLayout = QVBoxLayout()
         optionsLayout.addLayout(optionsRowLayout)
         optionsLayout.addLayout(columnDropdownsLayout)
 
+        # Adds chat box to side of buttons + dropdowns
         optionsChatLayout = QHBoxLayout()
         optionsChatLayout.addLayout(optionsLayout, 3) # The second param on this line/next line is the stretch. Thus 3/1 gives 75% of the space to the options and 25% to chat
         optionsChatLayout.addWidget(chatWindow, 1)
 
+        # Adds plot columns and interactable GUI section to grid layout, currently only two things to add so same as QVBoxLayout but allows for more adaptability later
         self.parent.addLayout(combindedPlotColumnLayout, 0, 0)
         self.parent.addLayout(optionsChatLayout, 1, 0)
         
@@ -252,16 +255,16 @@ class CustomGridLayout(QGridLayout):
         # 2s wait seems to work but if auto connection is failing but manually connecting works, try making the sleep longer
         startStop.connect("Automatic Connection Attempt Failed") # Automatically clicks "connect" button, gives unique error message on failure
         
-
+# Required app startup code
 def main(port):
     app = QApplication(sys.argv)
-    main = MainWindow(port)
+    main = MainWindow(port) # Port allows user to pass in a custom port to connect to
     main.show()
     sys.exit(app.exec_())
 
-
+# Parses arguments and calls main function
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--port", help="Chip Port Name, /dev/cu.*")
     args = parser.parse_args()
-    main(args.port)
+    main(args.port) # Port allows user to pass in a custom port to connect to
