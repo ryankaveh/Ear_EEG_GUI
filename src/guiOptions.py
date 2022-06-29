@@ -50,7 +50,7 @@ class StartStop(QWidget):
         self.chatWindow.commandWriter.sendStartCommand()
 
         self.running.value = True
-        self.saveDataMenuButton.setChangeable(False)
+        self.saveDataMenuButton.menu.setChangeable(False)
         self.startButton.setEnabled(False)
         self.stopButton.setEnabled(True)
         self.regDump.disable()
@@ -65,7 +65,7 @@ class StartStop(QWidget):
     def stop(self):
 
         self.running.value = False
-        self.saveDataMenuButton.setChangeable(True)
+        self.saveDataMenuButton.menu.setChangeable(True)
         self.stopButton.setEnabled(False)
         self.startButton.setEnabled(True)
         self.regDump.enable()
@@ -525,6 +525,7 @@ class PyserialReset(QWidget):
         self.chatWindow.commandWriter.sendPyserialResetCommand()
         self.chatWindow.addMessage("Pyserial Connection Reset")
         sleep(0.5) # This should work as the commands will just be queued until the reset is finished
+        self.chatWindow.addMessage("Re-running Startup Commands")
         self.chatWindow.commandWriter.runStartupCommands() # These will run whether or not the reset is able to reestablish communication
 
 
