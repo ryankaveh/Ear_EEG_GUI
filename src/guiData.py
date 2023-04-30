@@ -21,6 +21,7 @@ class SerialReader():
 
         self.refreshRate = 10 # Refresh rate in ms, only used when in command mode
         self.commandMode = True # Controls whether serialReader is looking for data or command responses, always starts in command mode
+        self.packetCount = 0
 
     # Waits for serial port connection and, once established, starts a loop to read data from and write commands to the pyserial connection
     def startSerialReader(self):
@@ -51,6 +52,8 @@ class SerialReader():
                     self.commandMode = False # Data read will now expect eeg data to be streaming
                 elif command == "stop":
                     self.commandMode = True # Data read will only expect responses to commands
+                    self.commandResponsePipe.send(f"Received {self.packetCount} packets")
+                    self.packetCount = 0
                     # Waits for eeg data to finish arriving and throws it away, old usage, should be included if pyserial reset is removed
                     # sleep(0.5) 
                     # self.serialGUISide.reset_input_buffer()
@@ -111,6 +114,7 @@ class SerialReader():
 
             val = b''
             val += self.serialGUISide.read(65) # Reads one packet of eeg data which is always exactly 65 bytes long
+            self.packetCount += 1
 
             packetId = int.from_bytes(val[:1], "big") # Extracts packet id from first byte
             

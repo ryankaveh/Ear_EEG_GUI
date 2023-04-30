@@ -43,8 +43,9 @@ class StartStop(QWidget):
 
         self.cueSystem = None
         self.synced = None
+        self.startTime = None
         self.connected = False
-    
+        
     def start(self):
 
         self.chatWindow.commandWriter.sendStartCommand()
@@ -62,6 +63,8 @@ class StartStop(QWidget):
 
         self.chatWindow.addMessage("Streaming Started")
 
+        self.startTime = time()
+
     def stop(self):
 
         self.running.value = False
@@ -76,7 +79,9 @@ class StartStop(QWidget):
             self.cueSystem.stopTest()
 
         self.chatWindow.commandWriter.sendStopCommand()
-
+        
+        timeDiff = time() - self.startTime
+        self.chatWindow.addMessage(f"Ran for {timeDiff} seconds")
         self.chatWindow.addMessage("Streaming Stopped")
 
     def connect(self, failureMessage="No Device Found"): # failureMessage used to modify message when automatic connection is attempted (currently on startup)
